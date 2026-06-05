@@ -71,8 +71,118 @@ const ICONS = {
   star: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
   trash: "M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6",
   chevronRight: "M9 18l6-6-6-6",
-  user: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"
+  user: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+  water: "M12 2.5s6 6.42 6 11.1A6 6 0 0 1 6 13.6C6 8.92 12 2.5 12 2.5z",
+  moon: "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z",
+  flame: "M8.5 14.5A4.5 4.5 0 0 0 12 22a6 6 0 0 0 6-6c0-4-3-6-3-9-2 1-3 3-3 5-2-1-3.5-3-3-6-3 3-4.5 6-4.5 8.5z",
+  book: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5V5a2 2 0 0 1 2-2h14v18H6.5A2.5 2.5 0 0 1 4 19.5z",
+  film: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5zM7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4",
+  sparkles: "M12 3l1.7 4.3L18 9l-4.3 1.7L12 15l-1.7-4.3L6 9l4.3-1.7L12 3zM5 14l.9 2.1L8 17l-2.1.9L5 20l-.9-2.1L2 17l2.1-.9L5 14zM19 14l.9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9L19 14z"
 };
+
+const DEFAULT_HABITS = [
+  { id: 'h1', title: 'Read 15 Pages', category: 'Mind' },
+  { id: 'h2', title: '10k Steps Walked', category: 'Fitness' },
+  { id: 'h3', title: 'Hydrated (8+ Cups)', category: 'Health' },
+  { id: 'h4', title: 'No processed food', category: 'Nutrition' }
+];
+
+const VIEW_META = {
+  dashboard: { title: 'Daily Digest', short: 'Digest' },
+  fitness: { title: 'Training', short: 'Fitness' },
+  habits: { title: 'Habits', short: 'Habits' },
+  media: { title: 'Media Vault', short: 'Media' },
+  settings: { title: 'Settings', short: 'Settings' },
+  auth: { title: 'Sign In', short: 'Auth' }
+};
+
+function getHabitDefinitions() {
+  return JSON.parse(localStorage.getItem('life_tracker_habits_list')) || DEFAULT_HABITS;
+}
+
+function renderPageHeader(title, subtitle, kicker = "Today") {
+  return el('div', { class: 'page-header' },
+    el('div', { class: 'page-header-copy' },
+      el('span', { class: 'page-kicker' }, kicker),
+      el('h1', {}, title),
+      subtitle ? el('p', { class: 'page-subtitle' }, subtitle) : null
+    )
+  );
+}
+
+function renderMobileHeader() {
+  const meta = VIEW_META[state.activeView] || VIEW_META.dashboard;
+  return el('header', { class: 'mobile-app-header' },
+    el('div', { class: 'mobile-app-title' },
+      el('strong', {}, meta.short),
+      el('span', {}, "Life Tracker")
+    ),
+    el('input', {
+      type: 'date',
+      class: 'form-control mobile-date-control',
+      value: state.dateStr,
+      onChange: (e) => {
+        state.dateStr = e.target.value;
+        const desktopDate = document.getElementById('global-date-picker');
+        if (desktopDate) desktopDate.value = state.dateStr;
+        if (state.user && firebase.db) {
+          setupFirestoreLogSync(state.user, state.dateStr);
+        }
+        renderApp();
+      }
+    })
+  );
+}
+
+function renderMetricTile({ label, value, meta, iconPath, href, onClick }) {
+  const attrs = {
+    href: href || '#dashboard',
+    class: 'metric-tile'
+  };
+  if (onClick) attrs.onClick = onClick;
+  return el('a', attrs,
+    el('span', { class: 'metric-label' },
+      label,
+      iconPath ? icon(iconPath, "btn-icon") : null
+    ),
+    el('span', { class: 'metric-value' }, value),
+    meta ? el('span', { class: 'metric-meta' }, meta) : null
+  );
+}
+
+function renderQuickAction(label, meta, iconPath, onClick) {
+  return el('button', { class: 'quick-action', onClick },
+    el('span', { class: 'quick-action-icon' }, icon(iconPath, "btn-icon")),
+    el('span', {},
+      el('span', { class: 'quick-action-label' }, label),
+      el('span', { class: 'quick-action-meta' }, meta)
+    )
+  );
+}
+
+function renderSegmentedTabs(tabs, active, onSelect) {
+  return el('div', { class: 'segmented-control' },
+    ...tabs.map(tab => el('button', {
+      class: `segmented-btn ${active === tab.id ? 'active' : ''}`,
+      onClick: () => onSelect(tab.id)
+    }, tab.label))
+  );
+}
+
+function renderFieldCard(label, inputEl, meta = "") {
+  return el('div', { class: 'field-card' },
+    el('span', { class: 'form-label' }, label),
+    inputEl,
+    meta ? el('span', { class: 'metric-meta' }, meta) : null
+  );
+}
+
+function updateNumberFromInput(e, setter) {
+  setter(e.target.value);
+  const day = getTodayLog();
+  syncDailyProgress(day);
+  queueSave();
+}
 
 // --- Application State ---
 let state = {
@@ -108,6 +218,8 @@ let state = {
   // Daily Logs indexed by date (YYYY-MM-DD)
   logs: {}
 };
+
+let lastRenderedView = null;
 
 // Get default empty daily logs structure
 function getEmptyDayLog() {
@@ -573,6 +685,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // --- RENDER ROUTER ENGINE ---
 function renderApp() {
+  const shouldResetScroll = lastRenderedView !== state.activeView;
+  const desktopDate = document.getElementById('global-date-picker');
+  if (desktopDate) desktopDate.value = state.dateStr;
+
   // Update nav active states
   document.querySelectorAll('.nav-link, .bottom-nav-item').forEach(item => {
     const view = item.getAttribute('data-view') || item.getAttribute('href')?.replace('#', '');
@@ -589,9 +705,18 @@ function renderApp() {
 
   // Check auth block
   if (state.activeView === 'auth') {
+    mainContainer.appendChild(renderMobileHeader());
     mainContainer.appendChild(renderAuthPage());
+    if (shouldResetScroll) {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
+      setTimeout(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }), 0);
+    }
+    lastRenderedView = state.activeView;
     return;
   }
+
+  mainContainer.appendChild(renderMobileHeader());
 
   // Render active view
   switch (state.activeView) {
@@ -611,6 +736,13 @@ function renderApp() {
       mainContainer.appendChild(renderSettings());
       break;
   }
+
+  if (shouldResetScroll) {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
+    setTimeout(() => window.scrollTo({ top: 0, left: 0, behavior: 'auto' }), 0);
+  }
+  lastRenderedView = state.activeView;
 }
 
 // --- VIEW: AUTHENTICATION ---
@@ -663,18 +795,25 @@ function renderAuthPage() {
 // --- VIEW: DASHBOARD ---
 function renderDashboard() {
   const day = getTodayLog();
-  
-  // Calculate stats
+
   const totalCals = day.calories || 0;
   const activeBurn = getActiveBurn(day);
   const netCals = Math.max(0, totalCals - activeBurn);
   const calGoal = 2000; // default
   const calPercent = Math.min(100, Math.round((netCals / calGoal) * 100));
-  
   const stepGoal = 10000;
   const stepPercent = Math.min(100, Math.round(((day.steps || 0) / stepGoal) * 100));
+  const habits = getHabitDefinitions();
+  const habitsDone = (day.habitsCompleted || []).length;
+  const habitPercent = habits.length ? Math.round((habitsDone / habits.length) * 100) : 0;
+  const dailyScore = Math.round((
+    Math.min(stepPercent, 100) +
+    Math.min(calPercent, 100) +
+    Math.min((day.sleep || 0) / 8 * 100, 100) +
+    Math.min((day.water || 0) / 8 * 100, 100) +
+    habitPercent
+  ) / 5);
 
-  // AI Review Panel Section
   const coachPanel = el('div', { class: 'ai-coach-section' });
   const renderCoachPanel = () => {
     coachPanel.replaceChildren();
@@ -765,108 +904,63 @@ function renderDashboard() {
   
   renderCoachPanel();
 
-  // Dashboard Stats Grid
-  const grid = el('div', { class: 'card-grid card-grid-2' },
-    // Workout card
-    el('div', {
-      class: 'stat-card',
-      style: { cursor: 'pointer' },
-      onClick: () => { window.location.hash = '#fitness'; }
-    },
-      el('div', {},
-        el('span', { class: 'form-label' }, "WORKOUT TODAY"),
-        el('div', { class: 'stat-value' }, 
-          day.workouts.length > 0 
-            ? `${day.workouts.length} Exercise(s)` 
-            : "Rest Day"
-        )
-      ),
-      icon(ICONS.fitness, "brand-icon")
-    ),
-    // Steps card
-    el('div', {
-      class: 'stat-card',
-      style: { cursor: 'pointer' },
-      onClick: () => { window.location.hash = '#fitness'; }
-    },
-      el('div', {},
-        el('span', { class: 'form-label' }, `STEPS (${stepPercent}%)`),
-        el('div', { class: 'stat-value' }, `${(day.steps || 0).toLocaleString()} / 10k`),
-        el('div', { class: 'progress-bar-container' },
-          el('div', { class: 'progress-bar-fill', style: { width: `${stepPercent}%` } })
-        )
-      ),
-      icon(ICONS.chevronRight, "brand-icon")
-    ),
-    // Calories card
-    el('div', {
-      class: 'stat-card',
-      style: { cursor: 'pointer' },
-      onClick: () => { window.location.hash = '#fitness'; }
-    },
-      el('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' } },
-        el('span', { class: 'form-label' }, `NET NUTRITION (${calPercent}%)`),
-        el('div', { class: 'stat-value' }, `${netCals} / ${calGoal} kcal`),
-        el('div', { style: { display: 'flex', justifyContent: 'space-between', width: '100%', fontSize: '11px', marginTop: '2px' } },
-          el('span', { class: 'form-label', style: { fontSize: '11px', margin: 0 } }, `Intake: ${totalCals} | Burn: -${activeBurn} kcal`),
-          el('span', { class: 'form-label', style: { fontSize: '11px', margin: 0 } }, `Protein: ${day.protein || 0}g`)
-        ),
-        el('div', { class: 'progress-bar-container', style: { marginTop: '4px' } },
-          el('div', { class: 'progress-bar-fill', style: { width: `${calPercent}%` } })
-        )
-      )
-    ),
-    // Sleep card
-    el('div', {
-      class: 'stat-card',
-      style: { cursor: 'pointer' },
-      onClick: () => { window.location.hash = '#fitness'; }
-    },
-      el('div', {},
-        el('span', { class: 'form-label' }, "SLEEP LOG"),
-        el('div', { class: 'stat-value' }, `${day.sleep || 0} hrs`)
-      ),
-      icon(ICONS.chevronRight, "brand-icon")
-    )
+  const quickActions = el('div', { class: 'quick-action-grid' },
+    renderQuickAction("Log sleep", `${day.sleep || 0} hrs today`, ICONS.moon, () => {
+      const val = prompt("How many hours did you sleep?", day.sleep || "");
+      if (val !== null) {
+        day.sleep = parseFloat(val) || 0;
+        syncDailyProgress(day);
+        queueSave();
+        renderApp();
+      }
+    }),
+    renderQuickAction("Add water", `${day.water || 0}/8 cups`, ICONS.water, () => {
+      day.water = (day.water || 0) + 1;
+      syncDailyProgress(day);
+      queueSave();
+      renderApp();
+    }),
+    renderQuickAction("Log meal", `${day.calories || 0} kcal`, ICONS.flame, () => {
+      window.location.hash = '#fitness';
+    }),
+    renderQuickAction("Check habits", `${habitsDone}/${habits.length} complete`, ICONS.check, () => {
+      window.location.hash = '#habits';
+    })
   );
 
   const trends = getWeeklyTrends(state.dateStr);
   const trendSign = trends.weightChange7d > 0 ? '+' : '';
-  const trendsGrid = el('div', { style: { marginTop: '32px', marginBottom: '24px' } },
-    el('h3', { style: { fontSize: '22px', marginBottom: '16px', fontFamily: 'var(--font-display)' } }, "7-Day Moving Averages"),
-    el('div', { class: 'card-grid card-grid-2', style: { gap: '16px' } },
-      el('div', { class: 'stat-card', style: { padding: '12px 16px', backgroundColor: 'var(--colors-surface-card)', border: '1px solid var(--colors-hairline)' } },
-        el('div', {},
-          el('span', { class: 'form-label', style: { fontSize: '11px' } }, "AVG DAILY STEPS"),
-          el('div', { style: { fontFamily: 'var(--font-mono)', fontSize: '18px', fontWeight: '600', color: 'var(--colors-ink)' } }, 
-            trends.avgSteps7d > 0 ? `${trends.avgSteps7d.toLocaleString()} steps` : "No logs"
-          )
-        )
-      ),
-      el('div', { class: 'stat-card', style: { padding: '12px 16px', backgroundColor: 'var(--colors-surface-card)', border: '1px solid var(--colors-hairline)' } },
-        el('div', {},
-          el('span', { class: 'form-label', style: { fontSize: '11px' } }, "AVG DAILY CALORIES"),
-          el('div', { style: { fontFamily: 'var(--font-mono)', fontSize: '18px', fontWeight: '600', color: 'var(--colors-ink)' } }, 
-            trends.avgCalories7d > 0 ? `${trends.avgCalories7d} kcal` : "No logs"
-          )
-        )
-      ),
-      el('div', { class: 'stat-card', style: { padding: '12px 16px', backgroundColor: 'var(--colors-surface-card)', border: '1px solid var(--colors-hairline)' } },
-        el('div', {},
-          el('span', { class: 'form-label', style: { fontSize: '11px' } }, "AVG DAILY SLEEP"),
-          el('div', { style: { fontFamily: 'var(--font-mono)', fontSize: '18px', fontWeight: '600', color: 'var(--colors-ink)' } }, 
-            trends.avgSleep7d > 0 ? `${trends.avgSleep7d} hrs` : "No logs"
-          )
-        )
-      ),
-      el('div', { class: 'stat-card', style: { padding: '12px 16px', backgroundColor: 'var(--colors-surface-card)', border: '1px solid var(--colors-hairline)' } },
-        el('div', {},
-          el('span', { class: 'form-label', style: { fontSize: '11px' } }, "7-DAY WEIGHT CHANGE"),
-          el('div', { style: { fontFamily: 'var(--font-mono)', fontSize: '18px', fontWeight: '600', color: trends.weightChange7d > 0 ? 'var(--colors-primary)' : 'var(--colors-success)' } }, 
-            trends.weightChange7d !== 0 ? `${trendSign}${trends.weightChange7d.toFixed(1)} kg` : "Stable / No logs"
-          )
-        )
-      )
+  const trendsGrid = el('div', { class: 'panel-card' },
+    el('h3', {}, "7-Day Pattern"),
+    el('div', { class: 'card-grid card-grid-2' },
+      renderMetricTile({
+        label: "Avg Steps",
+        value: trends.avgSteps7d > 0 ? trends.avgSteps7d.toLocaleString() : "No logs",
+        meta: "Daily movement average",
+        iconPath: ICONS.chevronRight,
+        href: '#fitness'
+      }),
+      renderMetricTile({
+        label: "Avg Calories",
+        value: trends.avgCalories7d > 0 ? `${trends.avgCalories7d}` : "No logs",
+        meta: "Calories logged per day",
+        iconPath: ICONS.flame,
+        href: '#fitness'
+      }),
+      renderMetricTile({
+        label: "Avg Sleep",
+        value: trends.avgSleep7d > 0 ? `${trends.avgSleep7d}h` : "No logs",
+        meta: "Sleep rhythm this week",
+        iconPath: ICONS.moon,
+        href: '#fitness'
+      }),
+      renderMetricTile({
+        label: "Weight",
+        value: trends.weightChange7d !== 0 ? `${trendSign}${trends.weightChange7d.toFixed(1)}kg` : "Stable",
+        meta: trends.weightChange7d !== 0 ? "7-day change" : "No weekly change logged",
+        iconPath: ICONS.sparkles,
+        href: '#fitness'
+      })
     )
   );
 
@@ -897,13 +991,76 @@ function renderDashboard() {
     );
   }
 
+  const metrics = el('div', { class: 'metric-grid' },
+    renderMetricTile({
+      label: "Workout",
+      value: day.workouts.length > 0 ? `${day.workouts.length} logged` : "Rest day",
+      meta: day.workouts.length > 0 ? "Exercises in today's lift" : "Load a split or add a custom exercise",
+      iconPath: ICONS.fitness,
+      href: '#fitness'
+    }),
+    renderMetricTile({
+      label: `Steps ${stepPercent}%`,
+      value: `${(day.steps || 0).toLocaleString()}`,
+      meta: `${stepGoal.toLocaleString()} step goal`,
+      iconPath: ICONS.chevronRight,
+      href: '#fitness'
+    }),
+    renderMetricTile({
+      label: `Nutrition ${calPercent}%`,
+      value: `${netCals}`,
+      meta: `${totalCals} in · ${activeBurn} burned · ${day.protein || 0}g protein`,
+      iconPath: ICONS.flame,
+      href: '#fitness'
+    }),
+    renderMetricTile({
+      label: "Sleep",
+      value: `${day.sleep || 0}h`,
+      meta: "Aim for a steady 7-8h window",
+      iconPath: ICONS.moon,
+      href: '#fitness'
+    }),
+    renderMetricTile({
+      label: "Water",
+      value: `${day.water || 0}/8`,
+      meta: "250ml cups logged today",
+      iconPath: ICONS.water,
+      href: '#fitness'
+    }),
+    renderMetricTile({
+      label: `Habits ${habitPercent}%`,
+      value: `${habitsDone}/${habits.length}`,
+      meta: "Routine items completed",
+      iconPath: ICONS.check,
+      href: '#habits'
+    })
+  );
+
   return el('div', { class: 'section' },
     el('div', { class: 'container' },
-      el('h1', { style: { fontFamily: 'var(--font-display)', marginBottom: '8px' } }, "Daily Digest"),
-      el('p', { class: 'form-label', style: { marginBottom: '24px' } }, `Journal logs for ${state.dateStr}`),
-      insightsCard,
-      grid,
-      trendsGrid,
+      renderPageHeader("Daily Digest", `Journal logs for ${state.dateStr}. Quick-log the day first, then use the details screens when you need more control.`, "Today Command Center"),
+      el('div', { class: 'command-center' },
+        el('section', { class: 'today-hero' },
+          el('span', { class: 'page-kicker' }, "Today's readiness"),
+          el('h2', {}, dailyScore >= 70 ? "You are building momentum." : "Start with one clean log."),
+          el('p', {}, dailyScore >= 70
+            ? "Your daily markers are filling in. Use the quick actions to keep the record current."
+            : "The fastest win is to log sleep, water, or steps. Keep the daily record honest and light."
+          ),
+          el('div', { class: 'daily-score' },
+            el('strong', {}, `${dailyScore}`),
+            el('span', {}, "/ 100 daily score")
+          ),
+          quickActions
+        ),
+        el('aside', { class: 'panel-card' },
+          el('h3', {}, "Next Best Actions"),
+          insightsCard || el('div', { class: 'empty-state' }, "No urgent prompts. Keep logging the basics as the day moves."),
+          el('button', { class: 'btn btn-primary', style: { marginTop: '16px', width: '100%' }, onClick: () => { window.location.hash = '#fitness'; } }, "Open Quick Log")
+        )
+      ),
+      el('div', { style: { marginTop: '24px' } }, metrics),
+      el('div', { style: { marginTop: '24px' } }, trendsGrid),
       coachPanel
     )
   );
@@ -914,7 +1071,7 @@ function renderFitness() {
   const day = getTodayLog();
   
   // Track active visual tab (Split Planner vs Log)
-  const tabs = el('div', { class: 'tabs-container' });
+  const tabs = el('div', { class: 'segmented-control' });
   const fitnessContent = el('div', {});
 
   const renderActiveFitnessTab = (tabName) => {
@@ -922,9 +1079,9 @@ function renderFitness() {
     
     // Rerender tabs buttons
     tabs.replaceChildren(
-      el('button', { class: `tab-btn ${tabName === 'log' ? 'active' : ''}`, onClick: () => renderActiveFitnessTab('log') }, "Daily Log"),
-      el('button', { class: `tab-btn ${tabName === 'planner' ? 'active' : ''}`, onClick: () => renderActiveFitnessTab('planner') }, "Split Routine Planner"),
-      el('button', { class: `tab-btn ${tabName === 'diet' ? 'active' : ''}`, onClick: () => renderActiveFitnessTab('diet') }, "Nutrition & Recipes")
+      el('button', { class: `segmented-btn ${tabName === 'log' ? 'active' : ''}`, onClick: () => renderActiveFitnessTab('log') }, "Quick Log"),
+      el('button', { class: `segmented-btn ${tabName === 'diet' ? 'active' : ''}`, onClick: () => renderActiveFitnessTab('diet') }, "Nutrition"),
+      el('button', { class: `segmented-btn ${tabName === 'planner' ? 'active' : ''}`, onClick: () => renderActiveFitnessTab('planner') }, "Planner")
     );
 
     if (tabName === 'log') {
@@ -960,7 +1117,7 @@ function renderFitness() {
         exercisesList.replaceChildren();
         
         if (day.workouts.length === 0) {
-          exercisesList.appendChild(el('div', { style: { textAlign: 'center', padding: '24px', backgroundColor: 'var(--colors-surface-card)', borderRadius: '12px' } },
+          exercisesList.appendChild(el('div', { class: 'empty-state' },
             el('p', {}, "No workout split loaded for today. Select one of your custom splits above to start logging, or create custom ones in the Split Routine Planner.")
           ));
           return;
@@ -1033,65 +1190,74 @@ function renderFitness() {
       renderExercisesLog();
 
       // Additional Stats Section (Steps, Sleep, Weight)
-      const statsPanel = el('div', { style: { marginTop: '32px' } },
-        el('h2', { style: { fontSize: '26px', marginBottom: '16px' } }, "Daily Metrics"),
-        el('div', { class: 'card-grid card-grid-3' },
+      const statsPanel = el('div', { class: 'panel-card', style: { marginBottom: '24px' } },
+        el('h2', { style: { fontSize: '26px' } }, "Quick Metrics"),
+        el('div', { class: 'quick-log-grid' },
           // Steps Input
-          el('div', { class: 'feature-card' },
-            el('span', { class: 'form-label' }, "Daily Steps"),
+          renderFieldCard("Daily Steps",
             el('input', {
               type: 'number',
               class: 'form-control',
               value: day.steps || '',
+              onInput: (e) => updateNumberFromInput(e, (value) => {
+                day.steps = parseInt(value) || 0;
+              }),
               placeholder: '10000',
               onChange: (e) => {
                 day.steps = parseInt(e.target.value) || 0;
                 syncDailyProgress(day);
                 queueSave();
               }
-            })
+            }),
+            "Updates the 10k habit automatically."
           ),
           // Sleep Input
-          el('div', { class: 'feature-card' },
-            el('span', { class: 'form-label' }, "Sleep Hours"),
+          renderFieldCard("Sleep Hours",
             el('input', {
               type: 'number',
               step: '0.5',
               class: 'form-control',
               value: day.sleep || '',
+              onInput: (e) => updateNumberFromInput(e, (value) => {
+                day.sleep = parseFloat(value) || 0;
+              }),
               placeholder: '8',
               onChange: (e) => {
                 day.sleep = parseFloat(e.target.value) || 0;
                 syncDailyProgress(day);
                 queueSave();
               }
-            })
+            }),
+            "Used in your daily score."
           ),
           // Weight Input
-          el('div', { class: 'feature-card' },
-            el('span', { class: 'form-label' }, "Body Weight (kg)"),
+          renderFieldCard("Body Weight (kg)",
             el('input', {
               type: 'number',
               step: '0.1',
               class: 'form-control',
               value: day.weight || '',
+              onInput: (e) => updateNumberFromInput(e, (value) => {
+                day.weight = parseFloat(value) || 0;
+              }),
               placeholder: '75.5',
               onChange: (e) => {
                 day.weight = parseFloat(e.target.value) || 0;
                 syncDailyProgress(day);
                 queueSave();
               }
-            })
+            }),
+            "Feeds the weekly weight pattern."
           )
         )
       );
 
       fitnessContent.appendChild(el('div', {},
+        statsPanel,
         el('h2', { style: { fontSize: '26px', marginBottom: '16px' } }, "Today's Lift"),
         el('p', { class: 'form-label', style: { marginBottom: '16px' } }, "Pick a split template to auto-fill, or manually log items:"),
         splitChips,
-        exercisesList,
-        statsPanel
+        exercisesList
       ));
 
     } else if (tabName === 'planner') {
@@ -1355,7 +1521,7 @@ function renderFitness() {
 
   return el('div', { class: 'section' },
     el('div', { class: 'container' },
-      el('h1', { style: { marginBottom: '24px' } }, "Training & Nutrition"),
+      renderPageHeader("Training & Nutrition", "Fast-log daily metrics first, then drill into workouts, meals, and saved routines.", "Fitness"),
       tabs,
       fitnessContent
     )
@@ -1367,22 +1533,18 @@ function renderHabits() {
   const day = getTodayLog();
   
   // Custom Habits definitions
-  let habits = JSON.parse(localStorage.getItem('life_tracker_habits_list')) || [
-    { id: 'h1', title: 'Read 15 Pages', category: 'Mind' },
-    { id: 'h2', title: '10k Steps Walked', category: 'Fitness' },
-    { id: 'h3', title: 'Hydrated (8+ Cups)', category: 'Health' },
-    { id: 'h4', title: 'No processed food', category: 'Nutrition' }
-  ];
+  let habits = getHabitDefinitions();
   
   const saveHabits = () => {
     localStorage.setItem('life_tracker_habits_list', JSON.stringify(habits));
     queueSave();
   };
 
-  const list = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } });
+  const completedCount = () => habits.filter(habit => day.habitsCompleted.includes(habit.id)).length;
+  const list = el('div', { class: 'panel-card' });
   
   const renderHabitsChecklist = () => {
-    list.replaceChildren();
+    const habitRows = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } });
     
     habits.forEach(habit => {
       const isCompleted = day.habitsCompleted.includes(habit.id);
@@ -1400,7 +1562,7 @@ function renderHabits() {
         }
       }, icon(ICONS.check));
       
-      list.appendChild(
+      habitRows.appendChild(
         el('div', { class: 'checklist-item' },
           checkBtn,
           el('div', { style: { flexGrow: '1', display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
@@ -1424,9 +1586,9 @@ function renderHabits() {
     });
 
     // Add Habit input
-    const addInput = el('div', { style: { display: 'flex', gap: '12px', marginTop: '16px' } },
-      el('input', { type: 'text', placeholder: 'New habit title...', class: 'form-control', style: { flexGrow: 1 }, id: 'new-habit-title' }),
-      el('input', { type: 'text', placeholder: 'Category (e.g. Mind)', class: 'form-control', style: { width: '140px' }, id: 'new-habit-cat' }),
+    const addInput = el('div', { class: 'form-row', style: { marginTop: '16px' } },
+      el('input', { type: 'text', placeholder: 'New habit title...', class: 'form-control', style: { flex: '1 1 220px' }, id: 'new-habit-title' }),
+      el('input', { type: 'text', placeholder: 'Category', class: 'form-control', style: { flex: '1 1 130px' }, id: 'new-habit-cat' }),
       el('button', {
         class: 'btn btn-primary',
         onClick: () => {
@@ -1444,7 +1606,17 @@ function renderHabits() {
         }
       }, "Add Habit")
     );
-    list.appendChild(addInput);
+    list.replaceChildren(
+      el('div', { class: 'page-header', style: { marginBottom: '16px' } },
+        el('div', {},
+          el('h2', { style: { fontSize: '28px' } }, "Today's Checklist"),
+          el('p', { class: 'page-subtitle' }, `${completedCount()} of ${habits.length} habits complete for ${state.dateStr}.`)
+        ),
+        el('span', { class: 'badge badge-coral' }, `${habits.length ? Math.round((completedCount() / habits.length) * 100) : 0}%`)
+      ),
+      habitRows,
+      addInput
+    );
   };
   
   renderHabitsChecklist();
@@ -1457,9 +1629,8 @@ function renderHabits() {
   
   const renderWeeklyGrid = () => {
     // Generate dates for current Mon-Sun
-    const curr = new Date();
+    const curr = new Date(state.dateStr);
     const first = curr.getDate() - curr.getDay() + 1; // Mon
-    const daysArr = [];
     
     const gridRows = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } });
     
@@ -1480,7 +1651,8 @@ function renderHabits() {
       const rowCols = [el('div', { style: { textAlign: 'left', fontWeight: '500', fontSize: '14px' } }, habit.title)];
       
       for (let i = 0; i < 7; i++) {
-        const d = new Date(curr.setDate(first + i));
+        const d = new Date(curr);
+        d.setDate(first + i);
         const dateKey = d.toISOString().split('T')[0];
         const dayLogs = state.logs[dateKey];
         const done = dayLogs && dayLogs.habitsCompleted.includes(habit.id);
@@ -1517,7 +1689,7 @@ function renderHabits() {
 
   return el('div', { class: 'section' },
     el('div', { class: 'container' },
-      el('h1', { style: { marginBottom: '24px' } }, "Habit Journal"),
+      renderPageHeader("Habit Journal", "Keep the checklist on top, then use the weekly grid to spot what is sticking.", "Routines"),
       list,
       weeklyGrid
     )
@@ -1526,7 +1698,7 @@ function renderHabits() {
 
 // --- VIEW: MEDIA (BOOKS & MOVIES) ---
 function renderMedia() {
-  const tabs = el('div', { class: 'tabs-container' });
+  const tabs = el('div', { class: 'segmented-control' });
   const mediaContent = el('div', {});
 
   // Custom Local Storage for Media lists
@@ -1548,8 +1720,8 @@ function renderMedia() {
     
     // Rerender tabs buttons
     tabs.replaceChildren(
-      el('button', { class: `tab-btn ${tabName === 'books' ? 'active' : ''}`, onClick: () => renderActiveMediaTab('books') }, "Book Reading"),
-      el('button', { class: `tab-btn ${tabName === 'movies' ? 'active' : ''}`, onClick: () => renderActiveMediaTab('movies') }, "Movies & Shows")
+      el('button', { class: `segmented-btn ${tabName === 'books' ? 'active' : ''}`, onClick: () => renderActiveMediaTab('books') }, "Books"),
+      el('button', { class: `segmented-btn ${tabName === 'movies' ? 'active' : ''}`, onClick: () => renderActiveMediaTab('movies') }, "Movies & Shows")
     );
 
     if (tabName === 'books') {
@@ -1566,7 +1738,7 @@ function renderMedia() {
             el('input', {
               type: 'number',
               class: 'form-control',
-              style: { width: '70px', height: '32px' },
+              style: { width: '92px', height: '40px' },
               value: book.read,
               onChange: (e) => {
                 const readPages = Math.min(book.pages, parseInt(e.target.value) || 0);
@@ -1683,8 +1855,16 @@ function renderMedia() {
           const renderStars = () => {
             starCluster.replaceChildren();
             for (let i = 1; i <= 5; i++) {
-              starCluster.appendChild(
+              starCluster.appendChild(el('button', {
+                class: 'btn btn-text star-btn',
+                onClick: () => {
+                  movie.rating = i;
+                  saveMedia();
+                  renderStars();
+                }
+              },
                 icon(ICONS.star, `btn-icon ${i <= (movie.rating || 0) ? 'active' : ''}`)
+              )
               );
             }
           };
@@ -1775,7 +1955,7 @@ function renderMedia() {
 
   return el('div', { class: 'section' },
     el('div', { class: 'container' },
-      el('h1', { style: { marginBottom: '24px' } }, "Media Vault"),
+      renderPageHeader("Media Vault", "Track pages, shelves, watch status, and quick reflections without turning the library into a form maze.", "Books & Shows"),
       tabs,
       mediaContent
     )
@@ -1823,8 +2003,17 @@ function renderSettings() {
   }, "Save Firebase Config");
 
   return el('div', { class: 'section' },
-    el('div', { class: 'container', style: { display: 'flex', flexDirection: 'column', gap: '32px' } },
-      el('h1', {}, "System Settings"),
+    el('div', { class: 'container' },
+      renderPageHeader("System Settings", "Manage sync, AI coaching, and local data without digging through one long technical panel.", "App Setup"),
+      el('div', { class: 'settings-grid' },
+        el('div', { class: 'feature-card' },
+          el('h3', {}, "Account & Sync"),
+          el('p', { class: 'form-label' }, state.user ? `Signed in as ${state.user.email || 'Google user'}.` : "Running in local-first mode."),
+          el('div', { class: 'form-row', style: { marginTop: '16px' } },
+            el('span', { class: 'badge badge-pill-cream' }, firebase.isFirebaseConfigured() ? "Firebase configured" : "Local only"),
+            el('span', { class: 'badge badge-teal' }, navigator.onLine ? "Online" : "Offline")
+          )
+        ),
       
       // Gemini API Settings
       el('div', { class: 'feature-card' },
@@ -1832,7 +2021,7 @@ function renderSettings() {
         el('p', { class: 'form-label', style: { marginBottom: '12px' } }, 
           "Input your Gemini API Key to enable direct AI health coaching feedback on the Dashboard. Get your key free at Google AI Studio."
         ),
-        el('div', { style: { display: 'flex', gap: '8px' } },
+        el('div', { class: 'form-row' },
           geminiKeyEl,
           el('button', {
             class: 'btn btn-secondary',
@@ -1850,7 +2039,7 @@ function renderSettings() {
           "Paste your Firebase Project Web Configuration object (JSON) below to enable cross-device syncing with Firebase Auth Google Sign-In and Cloud Firestore."
         ),
         firebaseConfigInput,
-        el('div', { style: { display: 'flex', gap: '12px', marginTop: '16px' } },
+        el('div', { class: 'form-row', style: { marginTop: '16px' } },
           saveConfigBtn,
           el('button', {
             class: 'btn btn-secondary',
@@ -1864,7 +2053,7 @@ function renderSettings() {
       ),
 
       // Reset cache warning
-      el('div', { class: 'feature-card', style: { borderColor: 'var(--colors-error)' } },
+      el('div', { class: 'feature-card danger-card' },
         el('h3', { style: { color: 'var(--colors-error)' } }, "System Cache Reset"),
         el('p', { class: 'form-label' }, "Clear all logged data, workout splits, recipes, and cached states from the local browser storage."),
         el('button', {
@@ -1878,6 +2067,7 @@ function renderSettings() {
             }
           }
         }, "Wipe App Cache")
+      )
       )
     )
   );

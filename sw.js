@@ -1,8 +1,8 @@
-const CACHE_NAME = 'life-tracker-cache-v2';
+const CACHE_NAME = 'life-tracker-cache-v3';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './index.css',
+  './index.css?v=3',
   './app.js',
   './firebase-config.js',
   './gemini.js',
