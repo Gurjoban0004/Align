@@ -116,15 +116,142 @@ function getEmptyDayLog() {
     meals: [],
     workouts: [], // exercises completed today
     habitsCompleted: [], // checklist IDs
-    aiReview: null // cached review for the day
+    aiReview: null, // cached review for the day
+    pagesRead: 0 // book pages read today
   };
+}
+
+function getActiveBurn(dayLog) {
+  let burn = 0;
+  if (dayLog.steps > 0) {
+    burn += dayLog.steps * 0.04;
+  }
+  if (dayLog.workouts && dayLog.workouts.length > 0) {
+    let totalSets = dayLog.workouts.reduce((acc, ex) => acc + (parseInt(ex.sets) || 0), 0);
+    burn += 150 + (totalSets * 20);
+  }
+  return Math.round(burn);
+}
+
+function syncDailyProgress(day) {
+  if (!day.habitsCompleted) {
+    day.habitsCompleted = [];
+  }
+  // Sync 10k Steps habit (h2)
+  if (day.steps >= 10000 && !day.habitsCompleted.includes('h2')) {
+    day.habitsCompleted.push('h2');
+  }
+  // Sync Hydration habit (h3)
+  if (day.water >= 8 && !day.habitsCompleted.includes('h3')) {
+    day.habitsCompleted.push('h3');
+  }
+}
+
+function generateInsights(day) {
+  const insights = [];
+  
+  // 1. Sleep prompt
+  if (!day.sleep || day.sleep === 0) {
+    insights.push({
+      id: 'log-sleep',
+      text: "You haven't logged sleep yet today.",
+      actionText: "Log Sleep",
+      action: (container) => {
+        container.replaceChildren(
+          el('span', { style: { fontSize: '13px', fontWeight: '500', marginRight: '8px' } }, "Hours:"),
+          el('input', {
+            type: 'number',
+            step: '0.5',
+            class: 'form-control',
+            style: { width: '80px', height: '28px', display: 'inline-block', padding: '2px 6px', marginRight: '8px' },
+            placeholder: '8',
+            id: 'inline-sleep-val'
+          }),
+          el('button', {
+            class: 'insights-btn-quick',
+            style: { height: '28px', padding: '0 12px', fontSize: '12px' },
+            onClick: () => {
+              const val = parseFloat(document.getElementById('inline-sleep-val').value) || 0;
+              if (val > 0) {
+                day.sleep = val;
+                queueSave();
+                renderApp();
+              }
+            }
+          }, "Save")
+        );
+      }
+    });
+  }
+
+  // 2. Active workout calorie burn prompt
+  if (day.workouts && day.workouts.length > 0) {
+    let totalSets = day.workouts.reduce((acc, ex) => acc + (parseInt(ex.sets) || 0), 0);
+    const burn = 150 + (totalSets * 20);
+    insights.push({
+      id: 'workout-burn',
+      text: `Workout active burn: -${burn} kcal calculated from ${day.workouts.length} exercises.`,
+      actionText: "Check Balance",
+      action: () => {
+        window.location.hash = '#fitness';
+      }
+    });
+  }
+
+  // 3. Reading page sync prompt
+  const pages = day.pagesRead || 0;
+  if (pages > 0) {
+    if (pages < 15 && !day.habitsCompleted.includes('h1')) {
+      insights.push({
+        id: 'read-pages-progress',
+        text: `You read ${pages} pages of a book today. Mark 'Read 15 Pages' habit as complete?`,
+        actionText: "Mark Complete",
+        action: () => {
+          if (!day.habitsCompleted.includes('h1')) {
+            day.habitsCompleted.push('h1');
+            queueSave();
+            renderApp();
+          }
+        }
+      });
+    } else if (pages >= 15) {
+      insights.push({
+        id: 'read-pages-success',
+        text: `Awesome! You read ${pages} pages today. 'Read 15 Pages' habit has been completed.`,
+        actionText: "View Habits",
+        action: () => {
+          window.location.hash = '#habits';
+        }
+      });
+    }
+  }
+
+  // 4. Steps prompt
+  if (day.steps && day.steps >= 10000 && !day.habitsCompleted.includes('h2')) {
+    insights.push({
+      id: 'steps-success',
+      text: `You reached your 10k steps goal (${day.steps.toLocaleString()} steps)!`,
+      actionText: "Complete Habit",
+      action: () => {
+        if (!day.habitsCompleted.includes('h2')) {
+          day.habitsCompleted.push('h2');
+          queueSave();
+          renderApp();
+        }
+      }
+    });
+  }
+
+  return insights;
 }
 
 function getTodayLog() {
   if (!state.logs[state.dateStr]) {
     state.logs[state.dateStr] = getEmptyDayLog();
   }
-  return state.logs[state.dateStr];
+  const day = state.logs[state.dateStr];
+  syncDailyProgress(day);
+  return day;
 }
 
 // Local Storage Fallbacks
@@ -534,8 +661,10 @@ function renderDashboard() {
   
   // Calculate stats
   const totalCals = day.calories || 0;
+  const activeBurn = getActiveBurn(day);
+  const netCals = Math.max(0, totalCals - activeBurn);
   const calGoal = 2000; // default
-  const calPercent = Math.min(100, Math.round((totalCals / calGoal) * 100));
+  const calPercent = Math.min(100, Math.round((netCals / calGoal) * 100));
   
   const stepGoal = 10000;
   const stepPercent = Math.min(100, Math.round(((day.steps || 0) / stepGoal) * 100));
@@ -634,7 +763,11 @@ function renderDashboard() {
   // Dashboard Stats Grid
   const grid = el('div', { class: 'card-grid card-grid-2' },
     // Workout card
-    el('div', { class: 'stat-card' },
+    el('div', {
+      class: 'stat-card',
+      style: { cursor: 'pointer' },
+      onClick: () => { window.location.hash = '#fitness'; }
+    },
       el('div', {},
         el('span', { class: 'form-label' }, "WORKOUT TODAY"),
         el('div', { class: 'stat-value' }, 
@@ -646,7 +779,11 @@ function renderDashboard() {
       icon(ICONS.fitness, "brand-icon")
     ),
     // Steps card
-    el('div', { class: 'stat-card' },
+    el('div', {
+      class: 'stat-card',
+      style: { cursor: 'pointer' },
+      onClick: () => { window.location.hash = '#fitness'; }
+    },
       el('div', {},
         el('span', { class: 'form-label' }, `STEPS (${stepPercent}%)`),
         el('div', { class: 'stat-value' }, `${(day.steps || 0).toLocaleString()} / 10k`),
@@ -657,19 +794,29 @@ function renderDashboard() {
       icon(ICONS.chevronRight, "brand-icon")
     ),
     // Calories card
-    el('div', { class: 'stat-card' },
-      el('div', {},
-        el('span', { class: 'form-label' }, `NUTRITION (${calPercent}%)`),
-        el('div', { class: 'stat-value' }, `${totalCals} / ${calGoal} kcal`),
-        el('span', { class: 'form-label', style: { fontSize: '11px' } }, `Protein: ${day.protein || 0}g`),
-        el('div', { class: 'progress-bar-container' },
+    el('div', {
+      class: 'stat-card',
+      style: { cursor: 'pointer' },
+      onClick: () => { window.location.hash = '#fitness'; }
+    },
+      el('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' } },
+        el('span', { class: 'form-label' }, `NET NUTRITION (${calPercent}%)`),
+        el('div', { class: 'stat-value' }, `${netCals} / ${calGoal} kcal`),
+        el('div', { style: { display: 'flex', justifyContent: 'space-between', width: '100%', fontSize: '11px', marginTop: '2px' } },
+          el('span', { class: 'form-label', style: { fontSize: '11px', margin: 0 } }, `Intake: ${totalCals} | Burn: -${activeBurn} kcal`),
+          el('span', { class: 'form-label', style: { fontSize: '11px', margin: 0 } }, `Protein: ${day.protein || 0}g`)
+        ),
+        el('div', { class: 'progress-bar-container', style: { marginTop: '4px' } },
           el('div', { class: 'progress-bar-fill', style: { width: `${calPercent}%` } })
         )
-      ),
-      icon(ICONS.chevronRight, "brand-icon")
+      )
     ),
     // Sleep card
-    el('div', { class: 'stat-card' },
+    el('div', {
+      class: 'stat-card',
+      style: { cursor: 'pointer' },
+      onClick: () => { window.location.hash = '#fitness'; }
+    },
       el('div', {},
         el('span', { class: 'form-label' }, "SLEEP LOG"),
         el('div', { class: 'stat-value' }, `${day.sleep || 0} hrs`)
@@ -718,10 +865,38 @@ function renderDashboard() {
     )
   );
 
+  const insightsList = generateInsights(day);
+  let insightsCard = null;
+  if (insightsList.length > 0) {
+    insightsCard = el('div', { class: 'insights-card' },
+      el('div', { class: 'insights-header' },
+        icon("M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10z", "btn-icon"),
+        "Proactive Insights"
+      ),
+      el('div', { style: { display: 'flex', flexDirection: 'column' } },
+        ...insightsList.map(item => {
+          const itemContainer = el('div', { class: 'insights-item' });
+          const textEl = el('span', { class: 'insights-item-text' }, item.text);
+          const btnEl = el('button', {
+            class: 'insights-btn-quick',
+            onClick: () => {
+              item.action(itemContainer);
+            }
+          }, item.actionText);
+          
+          itemContainer.appendChild(textEl);
+          itemContainer.appendChild(btnEl);
+          return itemContainer;
+        })
+      )
+    );
+  }
+
   return el('div', { class: 'section' },
     el('div', { class: 'container' },
       el('h1', { style: { fontFamily: 'var(--font-display)', marginBottom: '8px' } }, "Daily Digest"),
       el('p', { class: 'form-label', style: { marginBottom: '24px' } }, `Journal logs for ${state.dateStr}`),
+      insightsCard,
       grid,
       trendsGrid,
       coachPanel
@@ -866,6 +1041,7 @@ function renderFitness() {
               placeholder: '10000',
               onChange: (e) => {
                 day.steps = parseInt(e.target.value) || 0;
+                syncDailyProgress(day);
                 queueSave();
               }
             })
@@ -881,6 +1057,7 @@ function renderFitness() {
               placeholder: '8',
               onChange: (e) => {
                 day.sleep = parseFloat(e.target.value) || 0;
+                syncDailyProgress(day);
                 queueSave();
               }
             })
@@ -896,6 +1073,7 @@ function renderFitness() {
               placeholder: '75.5',
               onChange: (e) => {
                 day.weight = parseFloat(e.target.value) || 0;
+                syncDailyProgress(day);
                 queueSave();
               }
             })
@@ -913,19 +1091,19 @@ function renderFitness() {
 
     } else if (tabName === 'planner') {
       // Split Routine Planner View
-      const splitEditor = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '24px' } });
+      const splitEditor = el('div', { class: 'split-planner-grid' });
       const renderSplitEditor = () => {
         splitEditor.replaceChildren();
         
         Object.entries(state.workoutSplit).forEach(([splitName, exercises]) => {
-          const exercisesSublist = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' } });
+          const exercisesSublist = el('div', { class: 'split-exercise-list' });
           
           exercises.forEach((ex, idx) => {
             exercisesSublist.appendChild(
-              el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--colors-surface-soft)', padding: '8px 12px', borderRadius: '6px' } },
+              el('div', { class: 'split-exercise-item' },
                 el('div', {},
-                  el('span', { style: { fontWeight: 'bold' } }, ex.name),
-                  el('span', { style: { color: 'var(--colors-muted)', marginLeft: '12px', fontSize: '13px' } }, `${ex.sets}s × ${ex.reps}r @ ${ex.weight}kg`)
+                  el('span', { class: 'split-exercise-name' }, ex.name),
+                  el('span', { class: 'split-exercise-info' }, `${ex.sets}s × ${ex.reps}r @ ${ex.weight}kg`)
                 ),
                 el('button', {
                   class: 'btn btn-text',
@@ -965,7 +1143,7 @@ function renderFitness() {
           );
 
           splitEditor.appendChild(
-            el('div', { class: 'feature-card' },
+            el('div', { class: 'split-planner-card' },
               el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
                 el('h3', {}, splitName),
                 el('button', {
@@ -988,6 +1166,7 @@ function renderFitness() {
         splitEditor.appendChild(
           el('button', {
             class: 'btn btn-secondary',
+            style: { gridColumn: '1 / -1', justifySelf: 'start' },
             onClick: () => {
               const name = prompt("Enter Split Name (e.g. Upper Day, Full Body):");
               if (name && !state.workoutSplit[name]) {
@@ -1005,6 +1184,27 @@ function renderFitness() {
 
     } else if (tabName === 'diet') {
       // Nutrition & Recipe View
+      const activeBurn = getActiveBurn(day);
+      const netCals = Math.max(0, (day.calories || 0) - activeBurn);
+      const calGoal = 2000;
+      const calPercent = Math.min(100, Math.round((netCals / calGoal) * 100));
+
+      const nutritionSummary = el('div', { class: 'feature-card', style: { marginBottom: '24px', backgroundColor: 'var(--colors-surface-soft)' } },
+        el('h3', { style: { fontSize: '22px' } }, "Daily Calorie Balance"),
+        el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' } },
+          el('div', {},
+            el('div', { style: { fontSize: '28px', fontFamily: 'var(--font-display)', fontWeight: '600' } }, `${netCals} / ${calGoal} kcal`),
+            el('p', { class: 'form-label', style: { marginTop: '4px' } }, `Intake: ${day.calories || 0} kcal  ·  Active Burn: -${activeBurn} kcal`)
+          ),
+          el('div', { style: { textAlign: 'right' } },
+            el('span', { class: 'badge badge-coral' }, `Protein: ${day.protein || 0}g`)
+          )
+        ),
+        el('div', { class: 'progress-bar-container', style: { marginTop: '12px' } },
+          el('div', { class: 'progress-bar-fill', style: { width: `${calPercent}%` } })
+        )
+      );
+
       const mealsList = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '16px' } });
       const renderMealsLog = () => {
         mealsList.replaceChildren();
@@ -1135,6 +1335,7 @@ function renderFitness() {
       );
 
       fitnessContent.appendChild(el('div', {},
+        nutritionSummary,
         logForm,
         mealsList,
         waterLog,
@@ -1363,11 +1564,24 @@ function renderMedia() {
               style: { width: '70px', height: '32px' },
               value: book.read,
               onChange: (e) => {
-                const readPages = parseInt(e.target.value) || 0;
-                book.read = Math.min(book.pages, readPages);
+                const readPages = Math.min(book.pages, parseInt(e.target.value) || 0);
+                const diff = readPages - book.read;
+                
+                book.read = readPages;
                 if (book.read === book.pages) {
                   book.shelf = 'Completed';
                 }
+                
+                if (diff > 0) {
+                  const today = getTodayLog();
+                  today.pagesRead = (today.pagesRead || 0) + diff;
+                  
+                  // Auto-complete reading habit (h1) if total read pages today >= 15
+                  if (today.pagesRead >= 15 && !today.habitsCompleted.includes('h1')) {
+                    today.habitsCompleted.push('h1');
+                  }
+                }
+                
                 saveMedia();
                 renderActiveMediaTab('books');
               }
