@@ -134,6 +134,152 @@ function renderMobileHeader() {
   );
 }
 
+function renderActivityRingsSVG(calPercent, stepPercent, habitPercent) {
+  const c1 = 226.2;
+  const c2 = 175.9;
+  const c3 = 125.7;
+
+  const o1 = c1 - (Math.min(calPercent, 100) / 100 * c1);
+  const o2 = c2 - (Math.min(stepPercent, 100) / 100 * c2);
+  const o3 = c3 - (Math.min(habitPercent, 100) / 100 * c3);
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 100 100");
+  svg.setAttribute("width", "140");
+  svg.setAttribute("height", "140");
+  svg.style.display = "block";
+
+  const createRing = (r, strokeColor, bgStrokeColor, dashArray, dashOffset) => {
+    const bg = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    bg.setAttribute("cx", "50");
+    bg.setAttribute("cy", "50");
+    bg.setAttribute("r", r);
+    bg.setAttribute("stroke", bgStrokeColor);
+    bg.setAttribute("stroke-width", "5.5");
+    bg.setAttribute("fill", "none");
+
+    const fg = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    fg.setAttribute("cx", "50");
+    fg.setAttribute("cy", "50");
+    fg.setAttribute("r", r);
+    fg.setAttribute("stroke", strokeColor);
+    fg.setAttribute("stroke-width", "5.5");
+    fg.setAttribute("fill", "none");
+    fg.setAttribute("stroke-dasharray", dashArray);
+    fg.setAttribute("stroke-dashoffset", dashOffset);
+    fg.setAttribute("stroke-linecap", "round");
+    fg.setAttribute("transform", "rotate(-90 50 50)");
+
+    return [bg, fg];
+  };
+
+  const [bg1, fg1] = createRing(36, "var(--colors-primary)", "rgba(204, 120, 92, 0.15)", c1, o1);
+  const [bg2, fg2] = createRing(28, "var(--colors-accent-teal)", "rgba(93, 184, 166, 0.15)", c2, o2);
+  const [bg3, fg3] = createRing(20, "var(--colors-accent-amber)", "rgba(232, 165, 90, 0.15)", c3, o3);
+
+  svg.appendChild(bg1);
+  svg.appendChild(fg1);
+  svg.appendChild(bg2);
+  svg.appendChild(fg2);
+  svg.appendChild(bg3);
+  svg.appendChild(fg3);
+
+  return svg;
+}
+
+function renderProgressRingWidget({ label, value, meta, iconPath, percent, strokeColor, bgStrokeColor, href, quickActionText, onQuickAction }) {
+  const c = 2 * Math.PI * 26; // Circumference = 163.36
+  const offset = c - (Math.min(percent, 100) / 100 * c);
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 64 64");
+  svg.setAttribute("width", "64");
+  svg.setAttribute("height", "64");
+
+  const bg = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  bg.setAttribute("cx", "32");
+  bg.setAttribute("cy", "32");
+  bg.setAttribute("r", "26");
+  bg.setAttribute("stroke", bgStrokeColor);
+  bg.setAttribute("stroke-width", "5.5");
+  bg.setAttribute("fill", "none");
+
+  const fg = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  fg.setAttribute("cx", "32");
+  fg.setAttribute("cy", "32");
+  fg.setAttribute("r", "26");
+  fg.setAttribute("stroke", strokeColor);
+  fg.setAttribute("stroke-width", "5.5");
+  fg.setAttribute("fill", "none");
+  fg.setAttribute("stroke-dasharray", `${c}`);
+  fg.setAttribute("stroke-dashoffset", `${offset}`);
+  fg.setAttribute("stroke-linecap", "round");
+  fg.setAttribute("transform", "rotate(-90 32 32)");
+
+  svg.appendChild(bg);
+  svg.appendChild(fg);
+
+  const attrs = {
+    class: 'widget-metric-card',
+    onClick: (e) => {
+      // Navigate if they click the card itself and not any buttons inside it
+      if (!e.target.closest('.widget-quick-btn')) {
+        window.location.hash = href || '#dashboard';
+      }
+    }
+  };
+
+  const quickActionBtn = quickActionText ? el('button', {
+    class: 'widget-quick-btn',
+    style: {
+      marginTop: '8px',
+      padding: '4px 10px',
+      fontSize: '11px',
+      fontWeight: '600',
+      fontFamily: 'var(--font-sans)',
+      backgroundColor: bgStrokeColor,
+      color: strokeColor,
+      border: 'none',
+      borderRadius: 'var(--rounded-sm)',
+      cursor: 'pointer',
+      width: 'fit-content',
+      display: 'inline-flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      transition: 'var(--transition-default)',
+      outline: 'none'
+    },
+    onClick: (e) => {
+      e.stopPropagation();
+      if (onQuickAction) onQuickAction();
+    }
+  }, quickActionText) : null;
+
+  return el('div', attrs,
+    el('div', { class: 'widget-card-left' },
+      el('span', { class: 'widget-card-label' }, label),
+      el('span', { class: 'widget-card-value' }, value),
+      meta ? el('span', { class: 'widget-card-meta' }, meta) : null,
+      quickActionBtn
+    ),
+    el('div', { class: 'widget-card-right', style: { position: 'relative' } },
+      svg,
+      el('div', {
+        style: {
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          color: strokeColor,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }
+      }, icon(iconPath, "widget-center-icon"))
+    )
+  );
+}
+
 function renderMetricTile({ label, value, meta, iconPath, href, onClick }) {
   const attrs = {
     href: href || '#dashboard',
@@ -188,6 +334,7 @@ function updateNumberFromInput(e, setter) {
 let state = {
   user: null,
   activeView: 'dashboard',
+  dashboardSubTab: 'today',
   dateStr: new Date().toISOString().split('T')[0], // YYYY-MM-DD
   
   // Custom workout split routines
@@ -904,30 +1051,6 @@ function renderDashboard() {
   
   renderCoachPanel();
 
-  const quickActions = el('div', { class: 'quick-action-grid' },
-    renderQuickAction("Log sleep", `${day.sleep || 0} hrs today`, ICONS.moon, () => {
-      const val = prompt("How many hours did you sleep?", day.sleep || "");
-      if (val !== null) {
-        day.sleep = parseFloat(val) || 0;
-        syncDailyProgress(day);
-        queueSave();
-        renderApp();
-      }
-    }),
-    renderQuickAction("Add water", `${day.water || 0}/8 cups`, ICONS.water, () => {
-      day.water = (day.water || 0) + 1;
-      syncDailyProgress(day);
-      queueSave();
-      renderApp();
-    }),
-    renderQuickAction("Log meal", `${day.calories || 0} kcal`, ICONS.flame, () => {
-      window.location.hash = '#fitness';
-    }),
-    renderQuickAction("Check habits", `${habitsDone}/${habits.length} complete`, ICONS.check, () => {
-      window.location.hash = '#habits';
-    })
-  );
-
   const trends = getWeeklyTrends(state.dateStr);
   const trendSign = trends.weightChange7d > 0 ? '+' : '';
   const trendsGrid = el('div', { class: 'panel-card' },
@@ -991,77 +1114,185 @@ function renderDashboard() {
     );
   }
 
-  const metrics = el('div', { class: 'metric-grid' },
-    renderMetricTile({
+  const metrics = el('div', { class: 'widget-metric-grid' },
+    renderProgressRingWidget({
       label: "Workout",
       value: day.workouts.length > 0 ? `${day.workouts.length} logged` : "Rest day",
-      meta: day.workouts.length > 0 ? "Exercises in today's lift" : "Load a split or add a custom exercise",
+      meta: day.workouts.length > 0 ? "Today's exercises" : "No lift logged yet",
       iconPath: ICONS.fitness,
+      percent: day.workouts.length > 0 ? 100 : 0,
+      strokeColor: "var(--colors-primary)",
+      bgStrokeColor: "rgba(204, 120, 92, 0.15)",
       href: '#fitness'
     }),
-    renderMetricTile({
-      label: `Steps ${stepPercent}%`,
+    renderProgressRingWidget({
+      label: "Steps",
       value: `${(day.steps || 0).toLocaleString()}`,
       meta: `${stepGoal.toLocaleString()} step goal`,
       iconPath: ICONS.chevronRight,
-      href: '#fitness'
+      percent: stepPercent,
+      strokeColor: "var(--colors-accent-teal)",
+      bgStrokeColor: "rgba(93, 184, 166, 0.15)",
+      href: '#fitness',
+      quickActionText: "+ Add Steps",
+      onQuickAction: () => {
+        const val = prompt("Enter today's total steps:", day.steps || "");
+        if (val !== null) {
+          day.steps = parseInt(val) || 0;
+          syncDailyProgress(day);
+          queueSave();
+          renderApp();
+        }
+      }
     }),
-    renderMetricTile({
-      label: `Nutrition ${calPercent}%`,
+    renderProgressRingWidget({
+      label: "Nutrition",
       value: `${netCals}`,
-      meta: `${totalCals} in · ${activeBurn} burned · ${day.protein || 0}g protein`,
+      meta: `${totalCals} in · ${activeBurn} burn`,
       iconPath: ICONS.flame,
-      href: '#fitness'
+      percent: calPercent,
+      strokeColor: "var(--colors-primary)",
+      bgStrokeColor: "rgba(204, 120, 92, 0.15)",
+      href: '#fitness',
+      quickActionText: "+ Log Cal",
+      onQuickAction: () => {
+        const name = prompt("Enter meal description (optional):", "Quick log");
+        if (name !== null) {
+          const calsVal = prompt("Enter calories (kcal):", "300");
+          if (calsVal !== null) {
+            const cals = parseInt(calsVal) || 0;
+            const protVal = prompt("Enter protein (g, optional):", "0");
+            const prot = parseInt(protVal) || 0;
+            if (!day.meals) day.meals = [];
+            day.meals.push({ title: name || "Quick log", calories: cals, protein: prot });
+            day.calories = (day.calories || 0) + cals;
+            day.protein = (day.protein || 0) + prot;
+            syncDailyProgress(day);
+            queueSave();
+            renderApp();
+          }
+        }
+      }
     }),
-    renderMetricTile({
+    renderProgressRingWidget({
       label: "Sleep",
       value: `${day.sleep || 0}h`,
-      meta: "Aim for a steady 7-8h window",
+      meta: "8h daily sleep goal",
       iconPath: ICONS.moon,
-      href: '#fitness'
+      percent: Math.min(100, Math.round(((day.sleep || 0) / 8) * 100)),
+      strokeColor: "var(--colors-accent-amber)",
+      bgStrokeColor: "rgba(232, 165, 90, 0.15)",
+      href: '#fitness',
+      quickActionText: "Log Sleep",
+      onQuickAction: () => {
+        const val = prompt("How many hours did you sleep?", day.sleep || "");
+        if (val !== null) {
+          day.sleep = parseFloat(val) || 0;
+          syncDailyProgress(day);
+          queueSave();
+          renderApp();
+        }
+      }
     }),
-    renderMetricTile({
+    renderProgressRingWidget({
       label: "Water",
       value: `${day.water || 0}/8`,
-      meta: "250ml cups logged today",
+      meta: "8 cup hydration goal",
       iconPath: ICONS.water,
-      href: '#fitness'
+      percent: Math.min(100, Math.round(((day.water || 0) / 8) * 100)),
+      strokeColor: "var(--colors-accent-teal)",
+      bgStrokeColor: "rgba(93, 184, 166, 0.15)",
+      href: '#fitness',
+      quickActionText: "+ 1 Cup",
+      onQuickAction: () => {
+        day.water = (day.water || 0) + 1;
+        syncDailyProgress(day);
+        queueSave();
+        renderApp();
+      }
     }),
-    renderMetricTile({
-      label: `Habits ${habitPercent}%`,
+    renderProgressRingWidget({
+      label: "Habits",
       value: `${habitsDone}/${habits.length}`,
-      meta: "Routine items completed",
+      meta: "Routine check items",
       iconPath: ICONS.check,
+      percent: habitPercent,
+      strokeColor: "var(--colors-accent-amber)",
+      bgStrokeColor: "rgba(232, 165, 90, 0.15)",
       href: '#habits'
     })
   );
 
-  return el('div', { class: 'section' },
-    el('div', { class: 'container' },
-      renderPageHeader("Daily Digest", `Journal logs for ${state.dateStr}. Quick-log the day first, then use the details screens when you need more control.`, "Today Command Center"),
-      el('div', { class: 'command-center' },
-        el('section', { class: 'today-hero' },
-          el('span', { class: 'page-kicker' }, "Today's readiness"),
-          el('h2', {}, dailyScore >= 70 ? "You are building momentum." : "Start with one clean log."),
-          el('p', {}, dailyScore >= 70
-            ? "Your daily markers are filling in. Use the quick actions to keep the record current."
-            : "The fastest win is to log sleep, water, or steps. Keep the daily record honest and light."
-          ),
-          el('div', { class: 'daily-score' },
-            el('strong', {}, `${dailyScore}`),
-            el('span', {}, "/ 100 daily score")
-          ),
-          quickActions
+  const cockpitRings = renderActivityRingsSVG(calPercent, stepPercent, habitPercent);
+
+  const heroCard = el('section', { class: 'activity-cockpit' },
+    cockpitRings,
+    el('div', { class: 'activity-cockpit-info' },
+      el('span', { class: 'page-kicker', style: { color: 'var(--colors-on-dark-soft)' } }, "Today's readiness"),
+      el('h2', { style: { fontSize: '24px', margin: '0' } }, dailyScore >= 70 ? "You are building momentum." : "Start with one clean log."),
+      el('div', { class: 'activity-cockpit-score' },
+        el('strong', {}, `${dailyScore}`),
+        el('span', {}, "/ 100 daily score")
+      ),
+      el('div', { class: 'activity-legend' },
+        el('div', { class: 'activity-legend-item' },
+          el('span', { class: 'activity-dot calories' }),
+          el('span', {}, `Calories: ${calPercent}%`)
         ),
+        el('div', { class: 'activity-legend-item' },
+          el('span', { class: 'activity-dot steps' }),
+          el('span', {}, `Steps: ${stepPercent}%`)
+        ),
+        el('div', { class: 'activity-legend-item' },
+          el('span', { class: 'activity-dot habits' }),
+          el('span', {}, `Habits: ${habitPercent}%`)
+        )
+      )
+    )
+  );
+
+  const subTabs = el('div', { class: 'segmented-control', style: { marginBottom: '24px' } },
+    el('button', {
+      class: `segmented-btn ${state.dashboardSubTab === 'today' ? 'active' : ''}`,
+      onClick: () => {
+        state.dashboardSubTab = 'today';
+        renderApp();
+      }
+    }, "Today's Activity"),
+    el('button', {
+      class: `segmented-btn ${state.dashboardSubTab === 'coach' ? 'active' : ''}`,
+      onClick: () => {
+        state.dashboardSubTab = 'coach';
+        renderApp();
+      }
+    }, "AI Coach & Trends")
+  );
+
+  let dashboardContent;
+  if (state.dashboardSubTab === 'today') {
+    dashboardContent = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '24px' } },
+      el('div', { class: 'command-center' },
+        heroCard,
         el('aside', { class: 'panel-card' },
           el('h3', {}, "Next Best Actions"),
           insightsCard || el('div', { class: 'empty-state' }, "No urgent prompts. Keep logging the basics as the day moves."),
           el('button', { class: 'btn btn-primary', style: { marginTop: '16px', width: '100%' }, onClick: () => { window.location.hash = '#fitness'; } }, "Open Quick Log")
         )
       ),
-      el('div', { style: { marginTop: '24px' } }, metrics),
-      el('div', { style: { marginTop: '24px' } }, trendsGrid),
-      coachPanel
+      el('div', {}, metrics)
+    );
+  } else {
+    dashboardContent = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '24px' } },
+      coachPanel,
+      trendsGrid
+    );
+  }
+
+  return el('div', { class: 'section' },
+    el('div', { class: 'container' },
+      renderPageHeader("Daily Digest", `Journal logs for ${state.dateStr}. Quick-log the day first, then use the details screens when you need more control.`, "Today Command Center"),
+      subTabs,
+      dashboardContent
     )
   );
 }
