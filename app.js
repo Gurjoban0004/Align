@@ -40,9 +40,14 @@ function icon(d, classList = "") {
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("fill", "none");
   svg.setAttribute("stroke", "currentColor");
-  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-width", "2.5");
   svg.setAttribute("stroke-linecap", "round");
   svg.setAttribute("stroke-linejoin", "round");
+  
+  // Set physical pixel bounds directly on the SVG DOM node
+  svg.setAttribute("width", "16");
+  svg.setAttribute("height", "16");
+  
   if (classList) {
     svg.setAttribute("class", classList);
   }
