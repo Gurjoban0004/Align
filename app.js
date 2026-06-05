@@ -96,6 +96,26 @@ const VIEW_META = {
   auth: { title: 'Sign In', short: 'Auth' }
 };
 
+function formatLongDate(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr + 'T12:00:00'); // Use noon to avoid timezone shifts
+  const day = date.getDate();
+  const year = date.getFullYear();
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+  const monthName = months[date.getMonth()];
+  
+  // Suffix calculation
+  let suffix = 'th';
+  if (day === 1 || day === 21 || day === 31) suffix = 'st';
+  else if (day === 2 || day === 22) suffix = 'nd';
+  else if (day === 3 || day === 23) suffix = 'rd';
+  
+  return `${day}${suffix} ${monthName} ${year}`;
+}
+
 function getHabitDefinitions() {
   return JSON.parse(localStorage.getItem('life_tracker_habits_list')) || DEFAULT_HABITS;
 }
@@ -117,27 +137,29 @@ function renderMobileHeader() {
       el('strong', {}, meta.short),
       el('span', {}, "Life Tracker")
     ),
-    el('input', {
-      type: 'date',
-      class: 'form-control mobile-date-control',
-      value: state.dateStr,
-      onChange: (e) => {
-        state.dateStr = e.target.value;
-        const desktopDate = document.getElementById('global-date-picker');
-        if (desktopDate) desktopDate.value = state.dateStr;
-        if (state.user && firebase.db) {
-          setupFirestoreLogSync(state.user, state.dateStr);
+    el('div', { class: 'custom-date-container' },
+      el('span', {}, formatLongDate(state.dateStr)),
+      el('input', {
+        type: 'date',
+        value: state.dateStr,
+        onChange: (e) => {
+          state.dateStr = e.target.value;
+          const desktopDate = document.getElementById('global-date-picker');
+          if (desktopDate) desktopDate.value = state.dateStr;
+          if (state.user && firebase.db) {
+            setupFirestoreLogSync(state.user, state.dateStr);
+          }
+          renderApp();
         }
-        renderApp();
-      }
-    })
+      })
+    )
   );
 }
 
 function renderActivityRingsSVG(calPercent, stepPercent, habitPercent) {
-  const c1 = 226.2;
-  const c2 = 175.9;
-  const c3 = 125.7;
+  const c1 = 2 * Math.PI * 38; // Radius 38 = 238.76
+  const c2 = 2 * Math.PI * 29; // Radius 29 = 182.21
+  const c3 = 2 * Math.PI * 20; // Radius 20 = 125.66
 
   const o1 = c1 - (Math.min(calPercent, 100) / 100 * c1);
   const o2 = c2 - (Math.min(stepPercent, 100) / 100 * c2);
@@ -145,8 +167,8 @@ function renderActivityRingsSVG(calPercent, stepPercent, habitPercent) {
 
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", "0 0 100 100");
-  svg.setAttribute("width", "140");
-  svg.setAttribute("height", "140");
+  svg.setAttribute("width", "120");
+  svg.setAttribute("height", "120");
   svg.style.display = "block";
 
   const createRing = (r, strokeColor, bgStrokeColor, dashArray, dashOffset) => {
@@ -155,7 +177,7 @@ function renderActivityRingsSVG(calPercent, stepPercent, habitPercent) {
     bg.setAttribute("cy", "50");
     bg.setAttribute("r", r);
     bg.setAttribute("stroke", bgStrokeColor);
-    bg.setAttribute("stroke-width", "5.5");
+    bg.setAttribute("stroke-width", "7");
     bg.setAttribute("fill", "none");
 
     const fg = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -163,19 +185,19 @@ function renderActivityRingsSVG(calPercent, stepPercent, habitPercent) {
     fg.setAttribute("cy", "50");
     fg.setAttribute("r", r);
     fg.setAttribute("stroke", strokeColor);
-    fg.setAttribute("stroke-width", "5.5");
+    fg.setAttribute("stroke-width", "7");
     fg.setAttribute("fill", "none");
-    fg.setAttribute("stroke-dasharray", dashArray);
-    fg.setAttribute("stroke-dashoffset", dashOffset);
+    fg.setAttribute("stroke-dasharray", `${dashArray}`);
+    fg.setAttribute("stroke-dashoffset", `${dashOffset}`);
     fg.setAttribute("stroke-linecap", "round");
     fg.setAttribute("transform", "rotate(-90 50 50)");
 
     return [bg, fg];
   };
 
-  const [bg1, fg1] = createRing(36, "var(--colors-primary)", "rgba(204, 120, 92, 0.15)", c1, o1);
-  const [bg2, fg2] = createRing(28, "var(--colors-accent-teal)", "rgba(93, 184, 166, 0.15)", c2, o2);
-  const [bg3, fg3] = createRing(20, "var(--colors-accent-amber)", "rgba(232, 165, 90, 0.15)", c3, o3);
+  const [bg1, fg1] = createRing(38, "var(--colors-primary)", "#321b15", c1, o1);
+  const [bg2, fg2] = createRing(29, "var(--colors-accent-teal)", "#142925", c2, o2);
+  const [bg3, fg3] = createRing(20, "var(--colors-accent-amber)", "#2f2215", c3, o3);
 
   svg.appendChild(bg1);
   svg.appendChild(fg1);
@@ -820,6 +842,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const dateInput = document.getElementById('global-date-picker');
   if (dateInput) {
     dateInput.value = state.dateStr;
+    const label = document.getElementById('desktop-date-label');
+    if (label) label.textContent = formatLongDate(state.dateStr);
     dateInput.addEventListener('change', (e) => {
       state.dateStr = e.target.value;
       if (state.user && firebase.db) {
@@ -834,7 +858,11 @@ document.addEventListener('DOMContentLoaded', () => {
 function renderApp() {
   const shouldResetScroll = lastRenderedView !== state.activeView;
   const desktopDate = document.getElementById('global-date-picker');
-  if (desktopDate) desktopDate.value = state.dateStr;
+  if (desktopDate) {
+    desktopDate.value = state.dateStr;
+    const label = document.getElementById('desktop-date-label');
+    if (label) label.textContent = formatLongDate(state.dateStr);
+  }
 
   // Update nav active states
   document.querySelectorAll('.nav-link, .bottom-nav-item').forEach(item => {
@@ -1290,7 +1318,11 @@ function renderDashboard() {
 
   return el('div', { class: 'section' },
     el('div', { class: 'container' },
-      renderPageHeader("Daily Digest", `Journal logs for ${state.dateStr}. Quick-log the day first, then use the details screens when you need more control.`, "Today Command Center"),
+      el('div', { class: 'page-header', style: { marginBottom: '16px' } },
+        el('div', { class: 'page-header-copy' },
+          el('h1', { style: { fontSize: '36px', margin: 0 } }, "Daily Digest")
+        )
+      ),
       subTabs,
       dashboardContent
     )
