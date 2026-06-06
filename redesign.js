@@ -1965,6 +1965,59 @@ function renderDashboard() {
   return container;
 }
 
+// --- VIEW: ADD EXERCISE MODAL (BOTTOM SHEET) ---
+function openAddExerciseModal(day, onSave) {
+  const common = [
+    "Bench Press", "Squats", "Deadlift", "Overhead Press", 
+    "Lat Pulldown", "Barbell Row", "Bicep Curls", 
+    "Tricep Pushdowns", "Leg Press", "Calf Raises"
+  ];
+
+  showBottomSheet('Add Exercise', (body, dismiss) => {
+    body.appendChild(el('div', { class: 'food-section-label', style: { marginBottom: '8px' } }, 'Quick Select Presets'));
+    
+    const chipsGrid = el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' } });
+    common.forEach(name => {
+      const chip = el('button', {
+        class: 'step-preset-chip',
+        style: { padding: '6px 12px', minWidth: 'auto', display: 'inline-flex', flexDirection: 'row', gap: '4px', alignItems: 'center' },
+        onClick: () => {
+          day.workouts.push({ name, sets: 3, reps: 10, weight: 20 });
+          queueSave();
+          onSave();
+          dismiss();
+        }
+      }, name);
+      chipsGrid.appendChild(chip);
+    });
+    body.appendChild(chipsGrid);
+
+    body.appendChild(el('div', { class: 'food-section-label', style: { marginBottom: '8px' } }, 'Or Enter Custom Name'));
+    const input = el('input', {
+      type: 'text',
+      placeholder: 'Exercise title...',
+      class: 'form-control',
+      style: { width: '100%', marginBottom: '12px' }
+    });
+    const addBtn = el('button', {
+      class: 'btn btn-primary',
+      style: { width: '100%' },
+      onClick: () => {
+        const name = input.value.trim();
+        if (name) {
+          day.workouts.push({ name, sets: 3, reps: 10, weight: 20 });
+          queueSave();
+          onSave();
+          dismiss();
+        }
+      }
+    }, 'Add Custom Exercise');
+
+    body.appendChild(input);
+    body.appendChild(addBtn);
+  });
+}
+
 // --- VIEW: FITNESS (REDESIGNED EXERCISE WORKBOOK & MEAL DIET LIST) ---
 function renderFitness() {
   const day = getTodayLog();
@@ -1985,17 +2038,17 @@ function renderFitness() {
     
     subTabs.replaceChildren(
       el('button', { class: `segmented-btn ${tab === 'log' ? 'active' : ''}`, onClick: () => renderFitnessSubTab('log') }, "Exercise Log"),
-      el('button', { class: `segmented-btn ${tab === 'nutrition' ? 'active' : ''}`, onClick: () => renderFitnessSubTab('nutrition') }, "Nutrition & Fuel"),
-      el('button', { class: `segmented-btn ${tab === 'planner' ? 'active' : ''}`, onClick: () => renderFitnessSubTab('planner') }, "Split Planner")
+      el('button', { class: `segmented-btn ${tab === 'nutrition' ? 'active' : ''}`, onClick: () => renderFitnessSubTab('nutrition') }, "Nutrition & Fuel")
     );
 
     if (tab === 'log') {
       // Splits selection chips
-      const chips = el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' } });
+      const chips = el('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' } });
       Object.keys(state.workoutSplit).forEach(key => {
         chips.appendChild(
           el('button', {
             class: 'btn btn-secondary',
+            style: { padding: '6px 16px', fontSize: '13px' },
             onClick: () => {
               const exercises = state.workoutSplit[key];
               day.workouts = exercises.map(ex => ({
@@ -2027,9 +2080,9 @@ function renderFitness() {
           );
         } else {
           day.workouts.forEach((ex, idx) => {
-            const card = el('div', { class: 'form-card', style: { position: 'relative' } },
-              el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-                el('h3', {}, ex.name),
+            const card = el('div', { class: 'form-card exercise-logger-card', style: { position: 'relative' } },
+              el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' } },
+                el('h4', { style: { margin: '0', fontSize: '16px', fontWeight: '700', color: 'var(--colors-ink)' } }, ex.name),
                 el('button', {
                   class: 'btn btn-text',
                   style: { color: 'var(--colors-error)', padding: '4px' },
@@ -2040,10 +2093,10 @@ function renderFitness() {
                   }
                 }, icon(ICONS.trash))
               ),
-              el('div', { style: { display: 'flex', gap: '24px', flexWrap: 'wrap', marginTop: '8px' } },
+              el('div', { class: 'exercise-adjuster-row' },
                 // Sets adjuster
-                el('div', { class: 'form-group' },
-                  el('span', { class: 'form-label' }, "Sets"),
+                el('div', { class: 'adjuster-column' },
+                  el('span', { class: 'adjuster-label' }, "Sets"),
                   el('div', { class: 'inline-adjuster' },
                     el('button', { class: 'adjuster-btn', onClick: () => { if (ex.sets > 1) { ex.sets--; queueSave(); renderExerciseList(); } } }, "−"),
                     el('span', { class: 'adjuster-value' }, ex.sets),
@@ -2051,8 +2104,8 @@ function renderFitness() {
                   )
                 ),
                 // Reps adjuster
-                el('div', { class: 'form-group' },
-                  el('span', { class: 'form-label' }, "Reps"),
+                el('div', { class: 'adjuster-column' },
+                  el('span', { class: 'adjuster-label' }, "Reps"),
                   el('div', { class: 'inline-adjuster' },
                     el('button', { class: 'adjuster-btn', onClick: () => { if (ex.reps > 1) { ex.reps--; queueSave(); renderExerciseList(); } } }, "−"),
                     el('span', { class: 'adjuster-value' }, ex.reps),
@@ -2060,8 +2113,8 @@ function renderFitness() {
                   )
                 ),
                 // Weight adjuster
-                el('div', { class: 'form-group' },
-                  el('span', { class: 'form-label' }, "Weight (kg)"),
+                el('div', { class: 'adjuster-column' },
+                  el('span', { class: 'adjuster-label' }, "Weight"),
                   el('div', { class: 'inline-adjuster' },
                     el('button', { class: 'adjuster-btn', onClick: () => { if (ex.weight >= 2.5) { ex.weight -= 2.5; queueSave(); renderExerciseList(); } } }, "−"),
                     el('span', { class: 'adjuster-value', style: { minWidth: '70px' } }, `${ex.weight} kg`),
@@ -2074,20 +2127,15 @@ function renderFitness() {
           });
         }
 
-        // Custom exercise insertion button
+        // Add exercise button
         exerciseList.appendChild(
           el('button', {
             class: 'btn btn-primary',
-            style: { width: 'fit-content', alignSelf: 'center' },
+            style: { width: 'fit-content', alignSelf: 'center', marginTop: '8px' },
             onClick: () => {
-              const name = prompt("Enter custom exercise title:");
-              if (name) {
-                day.workouts.push({ name, sets: 3, reps: 10, weight: 20 });
-                queueSave();
-                renderExerciseList();
-              }
+              openAddExerciseModal(day, () => renderExerciseList());
             }
-          }, icon(ICONS.plus), "Add Custom Exercise")
+          }, icon(ICONS.plus), "Add Exercise")
         );
       };
 
@@ -2095,54 +2143,68 @@ function renderFitness() {
       activeContent.appendChild(exerciseList);
 
     } else if (tab === 'nutrition') {
+      const calGoal = 2000;
+      const proteinGoal = 150;
       
-      // Nutrition details card
-      const macrosCard = el('div', { class: 'form-card' },
-        el('h3', {}, "Nutrition Ledger"),
-        el('div', { style: { display: 'flex', gap: '24px', flexWrap: 'wrap' } },
-          el('div', { class: 'form-group', style: { flex: '1 1 120px' } },
-            el('span', { class: 'form-label' }, "Calories Logged (kcal)"),
-            el('input', {
-              type: 'number',
-              class: 'form-control',
-              value: day.calories || '',
-              onInput: (e) => {
-                day.calories = parseInt(e.target.value) || 0;
-                queueSave();
-              }
-            })
+      const calPercent = Math.min(100, Math.round(((day.calories || 0) / calGoal) * 100));
+      const proteinPercent = Math.min(100, Math.round(((day.protein || 0) / proteinGoal) * 100));
+
+      // Progress bars
+      const progressCard = el('div', { class: 'form-card', style: { display: 'flex', flexDirection: 'column', gap: '16px' } },
+        el('h3', {}, "Intake Progress"),
+        el('div', {},
+          el('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '13.5px', marginBottom: '6px' } },
+            el('span', { style: { fontWeight: '600' } }, "Calories"),
+            el('strong', {}, `${day.calories || 0} / ${calGoal} kcal (${calPercent}%)`)
           ),
-          el('div', { class: 'form-group', style: { flex: '1 1 120px' } },
-            el('span', { class: 'form-label' }, "Protein Logged (g)"),
-            el('input', {
-              type: 'number',
-              class: 'form-control',
-              value: day.protein || '',
-              onInput: (e) => {
-                day.protein = parseInt(e.target.value) || 0;
-                queueSave();
-              }
-            })
+          el('div', { class: 'macro-progress-bg' },
+            el('div', { class: 'macro-progress-fg calories', style: { width: `${calPercent}%` } })
+          )
+        ),
+        el('div', {},
+          el('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '13.5px', marginBottom: '6px' } },
+            el('span', { style: { fontWeight: '600' } }, "Protein"),
+            el('strong', {}, `${day.protein || 0} / ${proteinGoal} g (${proteinPercent}%)`)
           ),
-          el('div', { class: 'form-group', style: { flex: '1 1 120px' } },
-            el('span', { class: 'form-label' }, "Hydration (cups)"),
-            el('div', { class: 'inline-adjuster' },
-              el('button', { class: 'adjuster-btn', onClick: () => { if (day.water > 0) { day.water--; syncDailyProgress(day); queueSave(); renderFitnessSubTab('nutrition'); } } }, "−"),
-              el('span', { class: 'adjuster-value' }, `${day.water || 0} Cups`),
-              el('button', { class: 'adjuster-btn', onClick: () => { day.water = (day.water || 0) + 1; syncDailyProgress(day); queueSave(); renderFitnessSubTab('nutrition'); } }, "+")
-            )
+          el('div', { class: 'macro-progress-bg' },
+            el('div', { class: 'macro-progress-fg protein', style: { width: `${proteinPercent}%` } })
           )
         )
       );
 
-      // Meal lists
+      // Hydration & quick log inputs
+      const inputCard = el('div', { class: 'form-card', style: { display: 'grid', gridTemplateColumns: '1fr', gap: '16px' } },
+        el('h3', {}, "Log Metrics"),
+        el('div', { style: { display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' } },
+          el('div', { class: 'form-group', style: { flex: '1 1 180px' } },
+            el('span', { class: 'form-label' }, "Hydration (cups)"),
+            el('div', { class: 'inline-adjuster' },
+              el('button', { class: 'adjuster-btn', onClick: () => { if (day.water > 0) { day.water--; syncDailyProgress(day); queueSave(); renderFitnessSubTab('nutrition'); } } }, "−"),
+              el('span', { class: 'adjuster-value', style: { minWidth: '80px' } }, `${day.water || 0} Cups`),
+              el('button', { class: 'adjuster-btn', onClick: () => { day.water = (day.water || 0) + 1; syncDailyProgress(day); queueSave(); renderFitnessSubTab('nutrition'); } }, "+")
+            )
+          ),
+          el('div', { class: 'form-group', style: { flex: '1 1 180px', display: 'flex', flexDirection: 'column', gap: '6px' } },
+            el('span', { class: 'form-label' }, "Food Database"),
+            el('button', {
+              class: 'btn btn-primary',
+              style: { height: '34px', width: '100%' },
+              onClick: () => {
+                openFoodLogger(day);
+              }
+            }, icon(ICONS.search, "btn-icon"), "Search & Log Foods")
+          )
+        )
+      );
+
+      // Logged meals list
       const mealsList = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' } });
       const renderMealsList = () => {
-        mealsList.replaceChildren(el('h4', {}, "Today's Logged Meals"));
+        mealsList.replaceChildren(el('h4', { style: { fontSize: '15px', fontWeight: '700', marginBottom: '4px' } }, "Logged Meals"));
         
         if (!day.meals || day.meals.length === 0) {
           mealsList.appendChild(
-            el('div', { style: { color: 'var(--colors-muted)', fontStyle: 'italic', fontSize: '14px' } }, "No meals recorded for today yet.")
+            el('div', { style: { color: 'var(--colors-muted)', fontStyle: 'italic', fontSize: '13.5px' } }, "No meals recorded for today.")
           );
         } else {
           day.meals.forEach((m, idx) => {
@@ -2169,9 +2231,9 @@ function renderFitness() {
         }
       };
 
-      // Meal Quick Library selection
+      // Meal Quick Library shelf
       const recipeShelf = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '24px' } },
-        el('h4', {}, "Meal Library (Quick Log)")
+        el('h4', { style: { fontSize: '15px', fontWeight: '700' } }, "Meal Library Quick Add")
       );
 
       state.recipes.forEach(r => {
@@ -2197,36 +2259,10 @@ function renderFitness() {
       });
 
       renderMealsList();
-      activeContent.appendChild(macrosCard);
+      activeContent.appendChild(progressCard);
+      activeContent.appendChild(inputCard);
       activeContent.appendChild(mealsList);
       activeContent.appendChild(recipeShelf);
-
-    } else if (tab === 'planner') {
-      
-      // Planner widget to configure routines
-      const plannerCard = el('div', { class: 'form-card' },
-        el('h3', {}, "Custom Splits Configurator"),
-        el('p', { class: 'page-subtitle' }, "Configure workouts loaded when you track exercises in the log panel.")
-      );
-
-      Object.keys(state.workoutSplit).forEach(splitName => {
-        const splitBox = el('div', { style: { borderBottom: '1px solid var(--colors-hairline)', paddingBottom: '16px', marginBottom: '16px' } },
-          el('h4', { style: { color: 'var(--colors-primary)', marginBottom: '8px' } }, splitName)
-        );
-
-        state.workoutSplit[splitName].forEach((ex, exIdx) => {
-          splitBox.appendChild(
-            el('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '13.5px', marginBottom: '4px' } },
-              el('span', {}, `${ex.name}`),
-              el('span', { style: { fontWeight: '700' } }, `${ex.sets} sets x ${ex.reps} reps (${ex.weight}kg)`)
-            )
-          );
-        });
-
-        plannerCard.appendChild(splitBox);
-      });
-
-      activeContent.appendChild(plannerCard);
     }
   };
 
@@ -2680,8 +2716,113 @@ function renderSettings() {
     }, "Clear Local Cache Logs")
   );
 
+  // Splits Configurator Card
+  const splitsCard = el('div', { class: 'form-card splits-configurator-card' },
+    el('h3', {}, "Workout Splits Configurator"),
+    el('p', { class: 'page-subtitle' }, "Customize your routine templates. These default values populate when you load a split in the fitness tracker.")
+  );
+
+  Object.keys(state.workoutSplit).forEach(splitName => {
+    const splitWrapper = el('div', { class: 'settings-split-wrapper', style: { borderBottom: '1px solid var(--colors-hairline)', paddingBottom: '16px', marginBottom: '16px' } },
+      el('h4', { style: { color: 'var(--colors-primary)', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, 
+        splitName
+      )
+    );
+
+    const exercisesContainer = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } });
+
+    state.workoutSplit[splitName].forEach((ex, exIdx) => {
+      const row = el('div', { class: 'settings-split-row', style: { display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '8px' } },
+        el('span', { style: { fontWeight: '700', flex: '1 1 120px', fontSize: '13.5px' } }, ex.name),
+        // Sets input
+        el('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px' } },
+          el('span', { style: { fontSize: '12px', color: 'var(--colors-muted)' } }, "Sets"),
+          el('input', {
+            type: 'number',
+            class: 'form-control',
+            style: { width: '50px', padding: '2px 4px', textAlign: 'center', height: '26px' },
+            value: ex.sets,
+            onInput: (e) => {
+              ex.sets = parseInt(e.target.value) || 0;
+              saveLocalState();
+            }
+          })
+        ),
+        // Reps input
+        el('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px' } },
+          el('span', { style: { fontSize: '12px', color: 'var(--colors-muted)' } }, "Reps"),
+          el('input', {
+            type: 'number',
+            class: 'form-control',
+            style: { width: '50px', padding: '2px 4px', textAlign: 'center', height: '26px' },
+            value: ex.reps,
+            onInput: (e) => {
+              ex.reps = parseInt(e.target.value) || 0;
+              saveLocalState();
+            }
+          })
+        ),
+        // Weight input
+        el('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px' } },
+          el('span', { style: { fontSize: '12px', color: 'var(--colors-muted)' } }, "Weight"),
+          el('input', {
+            type: 'number',
+            class: 'form-control',
+            style: { width: '60px', padding: '2px 4px', textAlign: 'center', height: '26px' },
+            value: ex.weight,
+            onInput: (e) => {
+              ex.weight = parseFloat(e.target.value) || 0;
+              saveLocalState();
+            }
+          }),
+          el('span', { style: { fontSize: '12px', color: 'var(--colors-muted)' } }, "kg")
+        ),
+        // Delete button
+        el('button', {
+          class: 'btn btn-text',
+          style: { color: 'var(--colors-error)', padding: '2px', marginLeft: 'auto' },
+          onClick: () => {
+            state.workoutSplit[splitName].splice(exIdx, 1);
+            saveLocalState();
+            renderApp(); // Re-render Settings view
+          }
+        }, icon(ICONS.trash))
+      );
+      exercisesContainer.appendChild(row);
+    });
+
+    // Add new exercise row
+    const addRow = el('div', { style: { display: 'flex', gap: '12px', marginTop: '12px', alignItems: 'center' } },
+      el('input', {
+        type: 'text',
+        placeholder: 'Add new exercise name...',
+        class: 'form-control',
+        style: { flex: '1', height: '28px', fontSize: '13px' },
+        id: `add-ex-name-${splitName.replace(/\s+/g, '-')}`
+      }),
+      el('button', {
+        class: 'btn btn-primary',
+        style: { padding: '4px 12px', fontSize: '12.5px', height: '28px' },
+        onClick: () => {
+          const inputEl = document.getElementById(`add-ex-name-${splitName.replace(/\s+/g, '-')}`);
+          const name = inputEl.value.trim();
+          if (name) {
+            state.workoutSplit[splitName].push({ name, sets: 3, reps: 10, weight: 20 });
+            saveLocalState();
+            renderApp();
+          }
+        }
+      }, "Add")
+    );
+
+    splitWrapper.appendChild(exercisesContainer);
+    splitWrapper.appendChild(addRow);
+    splitsCard.appendChild(splitWrapper);
+  });
+
   container.appendChild(authCard);
   container.appendChild(firebaseCard);
+  container.appendChild(splitsCard);
   container.appendChild(geminiCard);
   container.appendChild(dangerCard);
   settingsWrapper.appendChild(container);

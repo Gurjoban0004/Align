@@ -1925,3 +1925,77 @@ textarea.form-control {
 .food-custom-form input::placeholder {
   color: var(--colors-muted-soft);
 }
+
+
+/* Fitness Page Overhaul - Horizontal adjusters */
+.exercise-logger-card {
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+}
+
+.exercise-adjuster-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  margin-top: 8px;
+  border-top: 1px solid var(--colors-hairline-soft);
+  padding-top: 12px;
+}
+
+.adjuster-column {
+  flex: 1 1 90px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xxs);
+}
+
+.adjuster-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--colors-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Macro progress bars */
+.macro-progress-bg {
+  width: 100%;
+  height: 8px;
+  background-color: var(--colors-surface-soft);
+  border-radius: var(--rounded-pill);
+  overflow: hidden;
+}
+
+.macro-progress-fg {
+  height: 100%;
+  border-radius: var(--rounded-pill);
+  transition: width 0.3s ease-in-out;
+}
+
+.macro-progress-fg.calories {
+  background-color: var(--colors-accent-terracotta);
+}
+
+.macro-progress-fg.protein {
+  background-color: var(--colors-accent-amber);
+}
+
+/* Splits Configurator inside Settings */
+.splits-configurator-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.settings-split-row {
+  background-color: var(--colors-surface-soft);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--rounded-sm);
+  border: 1px solid var(--colors-hairline);
+  transition: var(--transition-default);
+}
+
+.settings-split-row:hover {
+  border-color: var(--colors-muted-soft);
+}

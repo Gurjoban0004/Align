@@ -8,7 +8,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const PORT = 8080;
+const PORT = process.env.PORT || 8080;
 const HOST = '127.0.0.1'; // Secure localhost binding (CWE-1306 compliant)
 
 const MIME_TYPES = {
