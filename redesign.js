@@ -2780,7 +2780,7 @@ function renderMedia() {
                 } 
               }, b.status),
               b.status !== 'completed' 
-                ? el('span', { style: { fontSize: '12.5px', color: 'var(--colors-muted)', fontWeight: '600' } }, `${b.pagesRead} / ${b.totalPages} pages done`)
+                ? el('span', { style: { fontSize: '12.5px', color: 'var(--colors-muted)', fontWeight: '600' } }, `${b.pagesRead} / ${b.totalPages}`)
                 : null
             )
           )
