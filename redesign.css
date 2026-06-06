@@ -1981,6 +1981,10 @@ textarea.form-control {
   background-color: var(--colors-accent-amber);
 }
 
+.macro-progress-fg.habits {
+  background-color: var(--colors-accent-amber);
+}
+
 /* Splits Configurator inside Settings */
 .splits-configurator-card {
   display: flex;

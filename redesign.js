@@ -2297,6 +2297,41 @@ function renderFitness() {
 }
 
 // --- VIEW: DAILY HABITS (REDESIGNED BY CATEGORY WITH STREAKS) ---
+function getHabitStreak(habitId) {
+  let streak = 0;
+  let checkDate = new Date();
+  
+  const getFormatted = (d) => {
+    return d.toISOString().split('T')[0];
+  };
+
+  const todayStr = getFormatted(checkDate);
+  const todayLog = state.logs[todayStr] || {};
+  const completedToday = (todayLog.habitsCompleted || []).includes(habitId);
+
+  if (!completedToday) {
+    checkDate.setDate(checkDate.getDate() - 1);
+    const yesterdayStr = getFormatted(checkDate);
+    const yesterdayLog = state.logs[yesterdayStr] || {};
+    const completedYesterday = (yesterdayLog.habitsCompleted || []).includes(habitId);
+    if (!completedYesterday) {
+      return 0;
+    }
+  }
+
+  while (true) {
+    const dateStr = getFormatted(checkDate);
+    const log = state.logs[dateStr];
+    if (log && (log.habitsCompleted || []).includes(habitId)) {
+      streak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
 function renderHabits() {
   const day = getTodayLog();
   const habitsList = getHabitDefinitions();
@@ -2320,10 +2355,84 @@ function renderHabits() {
   });
 
   const habitsBox = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '24px' } });
+  const headerContainer = el('div');
+
+  const renderHabitsWelcomeAndStats = () => {
+    headerContainer.replaceChildren();
+    
+    const habitsDone = (day.habitsCompleted || []).length;
+    const habitsTotal = habitsList.length;
+    const habitsPercent = habitsTotal ? Math.min(100, Math.round((habitsDone / habitsTotal) * 100)) : 0;
+    
+    let totalCompletions7d = 0;
+    const todayObj = new Date();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(todayObj);
+      d.setDate(todayObj.getDate() - i);
+      const dStr = d.toISOString().split('T')[0];
+      const log = state.logs[dStr];
+      if (log && log.habitsCompleted) {
+        totalCompletions7d += log.habitsCompleted.length;
+      }
+    }
+    
+    let longestStreak = 0;
+    habitsList.forEach(h => {
+      longestStreak = Math.max(longestStreak, getHabitStreak(h.id));
+    });
+
+    const welcome = el('div', { class: 'form-card habits-welcome-card', style: { display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' } },
+      el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' } },
+        el('div', {},
+          el('h3', { style: { fontSize: '20px', fontWeight: '700', margin: '0' } }, "Habit Progression"),
+          el('p', { class: 'page-subtitle', style: { marginTop: '4px' } }, "Complete your checklist to build daily momentum.")
+        ),
+        el('div', { style: { fontSize: '13px', fontWeight: '700', color: 'var(--colors-accent-amber)', background: 'rgba(226, 169, 96, 0.12)', padding: '4px 10px', borderRadius: 'var(--rounded-pill)' } }, 
+          `Today: +${Math.round(habitsPercent * 0.2)}`
+        )
+      ),
+      el('div', {},
+        el('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '13.5px', marginBottom: '6px' } },
+          el('span', { style: { fontWeight: '600' } }, "Completions Checklist"),
+          el('strong', {}, `${habitsDone} / ${habitsTotal} Done (${habitsPercent}%)`)
+        ),
+        el('div', { class: 'macro-progress-bg' },
+          el('div', { class: 'macro-progress-fg habits', style: { width: `${habitsPercent}%` } })
+        )
+      )
+    );
+
+    const stats = el('div', { class: 'trend-tiles-row', style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' } },
+      el('div', { class: 'trend-tile', style: { margin: '0' } },
+        el('span', { class: 'trend-tile-label' }, "7d Completions"),
+        el('strong', { class: 'trend-tile-value' }, totalCompletions7d),
+        el('span', { class: 'trend-tile-meta' }, "Habits done last 7 days")
+      ),
+      el('div', { class: 'trend-tile', style: { margin: '0' } },
+        el('span', { class: 'trend-tile-label' }, "Longest Streak"),
+        el('strong', { class: 'trend-tile-value' }, longestStreak > 0 ? `${longestStreak}d` : "0d"),
+        el('span', { class: 'trend-tile-meta' }, "🔥 Max consecutive days")
+      )
+    );
+
+    headerContainer.appendChild(welcome);
+    headerContainer.appendChild(stats);
+  };
 
   const renderHabitsCategorized = () => {
     habitsBox.replaceChildren();
     
+    if (habitsList.length === 0) {
+      habitsBox.appendChild(
+        el('div', { style: { textAlign: 'center', padding: '40px', background: 'var(--colors-surface-card)', borderRadius: 'var(--rounded-xl)', border: '1px dashed var(--colors-muted-soft)' } },
+          el('p', { style: { color: 'var(--colors-muted)', fontStyle: 'italic' } }, 
+            "No habits defined. Go to Settings to configure your daily habits checklist."
+          )
+        )
+      );
+      return;
+    }
+
     Object.keys(categories).forEach(cat => {
       const section = el('div', { class: 'habits-category-section' },
         el('h4', { class: 'habits-category-header' }, cat)
@@ -2331,12 +2440,7 @@ function renderHabits() {
 
       categories[cat].forEach(h => {
         const isCompleted = (day.habitsCompleted || []).includes(h.id);
-        
-        // Mock streak calculation
-        let streak = 0;
-        if (isCompleted) {
-          streak = 5; // default streak
-        }
+        const streak = getHabitStreak(h.id);
 
         const checkbox = el('div', { class: 'habit-checkbox' }, icon(ICONS.check));
         
@@ -2352,6 +2456,7 @@ function renderHabits() {
             }
             queueSave();
             renderHabitsCategorized();
+            renderHabitsWelcomeAndStats();
           }
         },
           el('div', { class: 'habit-left-info' },
@@ -2368,52 +2473,12 @@ function renderHabits() {
 
       habitsBox.appendChild(section);
     });
-
-    // Form to create custom habit
-    const customHabitForm = el('div', { class: 'form-card', style: { marginTop: '32px' } },
-      el('h3', {}, "Add Custom Habit"),
-      el('div', { style: { display: 'flex', gap: '16px', flexWrap: 'wrap' } },
-        el('div', { class: 'form-group', style: { flex: '1 1 200px' } },
-          el('span', { class: 'form-label' }, "Habit Title"),
-          el('input', { type: 'text', class: 'form-control', placeholder: 'Read 15 Pages', id: 'new-habit-title' })
-        ),
-        el('div', { class: 'form-group', style: { flex: '1 1 120px' } },
-          el('span', { class: 'form-label' }, "Category"),
-          el('select', { class: 'form-control', id: 'new-habit-cat', style: { padding: '0 8px' } },
-            el('option', { value: 'Mind' }, "Mind"),
-            el('option', { value: 'Fitness' }, "Fitness"),
-            el('option', { value: 'Health' }, "Health"),
-            el('option', { value: 'Nutrition' }, "Nutrition")
-          )
-        )
-      ),
-      el('button', {
-        class: 'btn btn-primary',
-        style: { width: 'fit-content', alignSelf: 'flex-start', marginTop: '8px' },
-        onClick: () => {
-          const titleInput = document.getElementById('new-habit-title');
-          const catInput = document.getElementById('new-habit-cat');
-          if (titleInput && titleInput.value.trim()) {
-            const newId = `h-${Date.now()}`;
-            habitsList.push({ id: newId, title: titleInput.value.trim(), category: catInput.value });
-            saveHabitDefinitions(habitsList);
-            titleInput.value = '';
-            
-            // Reload local references
-            categories[catInput.value] = categories[catInput.value] || [];
-            categories[catInput.value].push({ id: newId, title: titleInput.value.trim(), category: catInput.value });
-            
-            // Re-render
-            window.location.reload(); // Quick refresh to repopulate categories
-          }
-        }
-      }, "Add Habit Item")
-    );
-
-    habitsBox.appendChild(customHabitForm);
   };
 
+  renderHabitsWelcomeAndStats();
   renderHabitsCategorized();
+  
+  container.appendChild(headerContainer);
   container.appendChild(habitsBox);
   habitsWrapper.appendChild(container);
   return habitsWrapper;
@@ -2730,6 +2795,7 @@ function renderSettings() {
         if (confirm("Reset application? All local mock data will be deleted.")) {
           localStorage.removeItem('life_tracker_redesign_logs');
           localStorage.removeItem('life_tracker_redesign_splits');
+          localStorage.removeItem('life_tracker_redesign_habits_list');
           localStorage.removeItem('life_tracker_redesign_recipes');
           localStorage.removeItem('life_tracker_redesign_books');
           localStorage.removeItem('life_tracker_redesign_movies');
@@ -2757,7 +2823,6 @@ function renderSettings() {
     state.workoutSplit[splitName].forEach((ex, exIdx) => {
       const row = el('div', { class: 'settings-split-row', style: { display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '8px' } },
         el('span', { style: { fontWeight: '700', flex: '1 1 120px', fontSize: '13.5px' } }, ex.name),
-        // Sets input
         el('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px' } },
           el('span', { style: { fontSize: '12px', color: 'var(--colors-muted)' } }, "Sets"),
           el('input', {
@@ -2771,7 +2836,6 @@ function renderSettings() {
             }
           })
         ),
-        // Reps input
         el('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px' } },
           el('span', { style: { fontSize: '12px', color: 'var(--colors-muted)' } }, "Reps"),
           el('input', {
@@ -2785,7 +2849,6 @@ function renderSettings() {
             }
           })
         ),
-        // Weight input
         el('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px' } },
           el('span', { style: { fontSize: '12px', color: 'var(--colors-muted)' } }, "Weight"),
           el('input', {
@@ -2800,21 +2863,19 @@ function renderSettings() {
           }),
           el('span', { style: { fontSize: '12px', color: 'var(--colors-muted)' } }, "kg")
         ),
-        // Delete button
         el('button', {
           class: 'btn btn-text',
           style: { color: 'var(--colors-error)', padding: '2px', marginLeft: 'auto' },
           onClick: () => {
             state.workoutSplit[splitName].splice(exIdx, 1);
             saveLocalState();
-            renderApp(); // Re-render Settings view
+            renderApp();
           }
         }, icon(ICONS.trash))
       );
       exercisesContainer.appendChild(row);
     });
 
-    // Add new exercise row
     const addRow = el('div', { style: { display: 'flex', gap: '12px', marginTop: '12px', alignItems: 'center' } },
       el('input', {
         type: 'text',
@@ -2843,9 +2904,79 @@ function renderSettings() {
     splitsCard.appendChild(splitWrapper);
   });
 
+  // Daily Habits Manager Card
+  const habitsList = getHabitDefinitions();
+  const habitsCard = el('div', { class: 'form-card splits-configurator-card' },
+    el('h3', {}, "Daily Habits Manager"),
+    el('p', { class: 'page-subtitle' }, "Configure your daily checklist items. Custom habits will immediately appear in your trackers.")
+  );
+
+  const habitsListContainer = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } });
+  habitsList.forEach((h, hIdx) => {
+    const row = el('div', { class: 'settings-split-row', style: { display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'space-between' } },
+      el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+        el('span', { style: { fontSize: '11px', fontWeight: '800', background: 'var(--colors-surface-soft)', color: 'var(--colors-ink)', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' } }, h.category),
+        el('span', { style: { fontWeight: '700', fontSize: '13.5px', color: 'var(--colors-ink)' } }, h.title)
+      ),
+      el('button', {
+        class: 'btn btn-text',
+        style: { color: 'var(--colors-error)', padding: '2px' },
+        onClick: () => {
+          habitsList.splice(hIdx, 1);
+          saveHabitDefinitions(habitsList);
+          saveLocalState();
+          renderApp();
+        }
+      }, icon(ICONS.trash))
+    );
+    habitsListContainer.appendChild(row);
+  });
+
+  const addHabitRow = el('div', { style: { display: 'flex', gap: '12px', marginTop: '16px', alignItems: 'center', flexWrap: 'wrap' } },
+    el('input', {
+      type: 'text',
+      placeholder: 'New habit title (e.g. Read 15 mins)...',
+      class: 'form-control',
+      style: { flex: '2 1 200px', height: '32px', fontSize: '13px' },
+      id: 'settings-new-habit-title'
+    }),
+    el('select', {
+      class: 'form-control',
+      style: { flex: '1 1 100px', height: '32px', fontSize: '13px', padding: '0 4px' },
+      id: 'settings-new-habit-cat'
+    },
+      el('option', { value: 'Mind' }, "Mind"),
+      el('option', { value: 'Fitness' }, "Fitness"),
+      el('option', { value: 'Health' }, "Health"),
+      el('option', { value: 'Nutrition' }, "Nutrition")
+    ),
+    el('button', {
+      class: 'btn btn-primary',
+      style: { padding: '4px 16px', fontSize: '12.5px', height: '32px' },
+      onClick: () => {
+        const titleInput = document.getElementById('settings-new-habit-title');
+        const catSelect = document.getElementById('settings-new-habit-cat');
+        const title = titleInput ? titleInput.value.trim() : '';
+        const cat = catSelect ? catSelect.value : 'Mind';
+        
+        if (title) {
+          const newId = `h-${Date.now()}`;
+          habitsList.push({ id: newId, title, category: cat });
+          saveHabitDefinitions(habitsList);
+          saveLocalState();
+          renderApp();
+        }
+      }
+    }, "Add")
+  );
+
+  habitsCard.appendChild(habitsListContainer);
+  habitsCard.appendChild(addHabitRow);
+
   container.appendChild(authCard);
   container.appendChild(firebaseCard);
   container.appendChild(splitsCard);
+  container.appendChild(habitsCard);
   container.appendChild(geminiCard);
   container.appendChild(dangerCard);
   settingsWrapper.appendChild(container);
