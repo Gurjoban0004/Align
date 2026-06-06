@@ -846,8 +846,33 @@ function openFoodLogger(day) {
   showBottomSheet('Log Food', (body, dismiss) => {
     let searchQuery = '';
     let showCustomForm = false;
-    let servingMultiplier = 1;
-    let selectedFood = null;
+
+    function logFoodItem(food, btn) {
+      const cal = food.cal;
+      const prot = food.protein;
+      day.calories = (day.calories || 0) + cal;
+      day.protein = (day.protein || 0) + prot;
+      if (!day.meals) day.meals = [];
+      day.meals.push({
+        title: food.name,
+        serving: food.serving || '1 serving',
+        multiplier: 1,
+        calories: cal,
+        protein: prot
+      });
+      saveRecentFood(food);
+      syncDailyProgress(day);
+      queueSave();
+
+      if (btn) {
+        btn.innerHTML = '✓';
+        btn.classList.add('added');
+        setTimeout(() => {
+          btn.innerHTML = '+';
+          btn.classList.remove('added');
+        }, 1000);
+      }
+    }
 
     function renderContent() {
       body.replaceChildren();
@@ -864,7 +889,6 @@ function openFoodLogger(day) {
       searchInput.addEventListener('input', (e) => {
         searchQuery = e.target.value;
         renderContent();
-        // Re-focus after re-render
         const newInput = body.querySelector('.food-search-bar input');
         if (newInput) {
           newInput.focus();
@@ -875,49 +899,6 @@ function openFoodLogger(day) {
       searchBar.appendChild(searchSvg);
       searchBar.appendChild(searchInput);
       body.appendChild(searchBar);
-
-      // Serving selector (if food selected)
-      if (selectedFood) {
-        const servingRow = el('div', { class: 'serving-selector' });
-        [0.5, 1, 1.5, 2].forEach(mult => {
-          const chip = el('button', {
-            class: `serving-chip ${servingMultiplier === mult ? 'active' : ''}`,
-            onClick: () => { servingMultiplier = mult; renderContent(); }
-          }, `${mult}x`);
-          servingRow.appendChild(chip);
-        });
-        const addBtn = el('button', {
-          class: 'btn btn-primary',
-          style: { marginLeft: 'auto' },
-          onClick: () => {
-            const cal = Math.round(selectedFood.cal * servingMultiplier);
-            const prot = Math.round(selectedFood.protein * servingMultiplier);
-            day.calories = (day.calories || 0) + cal;
-            day.protein = (day.protein || 0) + prot;
-            if (!day.meals) day.meals = [];
-            day.meals.push({
-              title: selectedFood.name,
-              serving: selectedFood.serving,
-              multiplier: servingMultiplier,
-              calories: cal,
-              protein: prot
-            });
-            saveRecentFood(selectedFood);
-            syncDailyProgress(day);
-            queueSave();
-            selectedFood = null;
-            servingMultiplier = 1;
-            renderContent();
-          }
-        }, `Add ${Math.round(selectedFood.cal * servingMultiplier)} kcal`);
-        servingRow.appendChild(addBtn);
-
-        body.appendChild(el('div', {},
-          el('div', { class: 'food-item-name', style: { marginBottom: '4px' } },
-            `${selectedFood.name} — ${selectedFood.serving}`),
-          servingRow
-        ));
-      }
 
       // Results
       const results = searchQuery.length >= 2
@@ -932,9 +913,7 @@ function openFoodLogger(day) {
             class: 'food-add-btn',
             onClick: (e) => {
               e.stopPropagation();
-              selectedFood = food;
-              servingMultiplier = 1;
-              renderContent();
+              logFoodItem(food, addBtn);
             }
           }, '+');
           const row = el('div', { class: 'food-item-row' },
@@ -958,9 +937,7 @@ function openFoodLogger(day) {
               class: 'food-add-btn',
               onClick: (e) => {
                 e.stopPropagation();
-                selectedFood = food;
-                servingMultiplier = 1;
-                renderContent();
+                logFoodItem(food, addBtn);
               }
             }, '+');
             const row = el('div', { class: 'food-item-row' },
@@ -983,9 +960,7 @@ function openFoodLogger(day) {
             class: 'food-add-btn',
             onClick: (e) => {
               e.stopPropagation();
-              selectedFood = food;
-              servingMultiplier = 1;
-              renderContent();
+              logFoodItem(food, addBtn);
             }
           }, '+');
           const row = el('div', { class: 'food-item-row' },
@@ -2038,29 +2013,31 @@ function renderFitness() {
     
     subTabs.replaceChildren(
       el('button', { class: `segmented-btn ${tab === 'log' ? 'active' : ''}`, onClick: () => renderFitnessSubTab('log') }, "Exercise Log"),
-      el('button', { class: `segmented-btn ${tab === 'nutrition' ? 'active' : ''}`, onClick: () => renderFitnessSubTab('nutrition') }, "Nutrition & Fuel")
+      el('button', { class: `segmented-btn ${tab === 'nutrition' ? 'active' : ''}`, onClick: () => renderFitnessSubTab('nutrition') }, "Nutrition")
     );
 
     if (tab === 'log') {
       // Splits selection chips
-      const chips = el('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' } });
+      const chips = el('div', { class: 'routine-chips-container', style: { display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '24px', alignItems: 'center' } },
+        el('span', { style: { fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--colors-muted)' } }, "Active Splits:")
+      );
       Object.keys(state.workoutSplit).forEach(key => {
         chips.appendChild(
           el('button', {
-            class: 'btn btn-secondary',
-            style: { padding: '6px 16px', fontSize: '13px' },
+            class: 'routine-chip',
             onClick: () => {
               const exercises = state.workoutSplit[key];
               day.workouts = exercises.map(ex => ({
                 name: ex.name,
                 sets: ex.sets,
                 reps: ex.reps,
-                weight: ex.weight
+                weight: ex.weight,
+                logged: false
               }));
               queueSave();
               renderFitnessSubTab('log');
             }
-          }, `Load ${key}`)
+          }, key)
         );
       });
       activeContent.appendChild(chips);
@@ -2080,7 +2057,8 @@ function renderFitness() {
           );
         } else {
           day.workouts.forEach((ex, idx) => {
-            const card = el('div', { class: 'form-card exercise-logger-card', style: { position: 'relative' } },
+            const isLogged = !!ex.logged;
+            const card = el('div', { class: `form-card exercise-logger-card ${isLogged ? 'logged' : ''}`, style: { position: 'relative' } },
               el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' } },
                 el('h4', { style: { margin: '0', fontSize: '16px', fontWeight: '700', color: 'var(--colors-ink)' } }, ex.name),
                 el('button', {
@@ -2098,28 +2076,41 @@ function renderFitness() {
                 el('div', { class: 'adjuster-column' },
                   el('span', { class: 'adjuster-label' }, "Sets"),
                   el('div', { class: 'inline-adjuster' },
-                    el('button', { class: 'adjuster-btn', onClick: () => { if (ex.sets > 1) { ex.sets--; queueSave(); renderExerciseList(); } } }, "−"),
+                    el('button', { class: 'adjuster-btn', disabled: isLogged, onClick: () => { if (ex.sets > 1) { ex.sets--; queueSave(); renderExerciseList(); } } }, "−"),
                     el('span', { class: 'adjuster-value' }, ex.sets),
-                    el('button', { class: 'adjuster-btn', onClick: () => { ex.sets++; queueSave(); renderExerciseList(); } }, "+")
+                    el('button', { class: 'adjuster-btn', disabled: isLogged, onClick: () => { ex.sets++; queueSave(); renderExerciseList(); } }, "+")
                   )
                 ),
                 // Reps adjuster
                 el('div', { class: 'adjuster-column' },
                   el('span', { class: 'adjuster-label' }, "Reps"),
                   el('div', { class: 'inline-adjuster' },
-                    el('button', { class: 'adjuster-btn', onClick: () => { if (ex.reps > 1) { ex.reps--; queueSave(); renderExerciseList(); } } }, "−"),
+                    el('button', { class: 'adjuster-btn', disabled: isLogged, onClick: () => { if (ex.reps > 1) { ex.reps--; queueSave(); renderExerciseList(); } } }, "−"),
                     el('span', { class: 'adjuster-value' }, ex.reps),
-                    el('button', { class: 'adjuster-btn', onClick: () => { ex.reps++; queueSave(); renderExerciseList(); } }, "+")
+                    el('button', { class: 'adjuster-btn', disabled: isLogged, onClick: () => { ex.reps++; queueSave(); renderExerciseList(); } }, "+")
                   )
                 ),
                 // Weight adjuster
                 el('div', { class: 'adjuster-column' },
                   el('span', { class: 'adjuster-label' }, "Weight"),
                   el('div', { class: 'inline-adjuster' },
-                    el('button', { class: 'adjuster-btn', onClick: () => { if (ex.weight >= 2.5) { ex.weight -= 2.5; queueSave(); renderExerciseList(); } } }, "−"),
+                    el('button', { class: 'adjuster-btn', disabled: isLogged, onClick: () => { if (ex.weight >= 2.5) { ex.weight -= 2.5; queueSave(); renderExerciseList(); } } }, "−"),
                     el('span', { class: 'adjuster-value', style: { minWidth: '70px' } }, `${ex.weight} kg`),
-                    el('button', { class: 'adjuster-btn', onClick: () => { ex.weight += 2.5; queueSave(); renderExerciseList(); } }, "+")
+                    el('button', { class: 'adjuster-btn', disabled: isLogged, onClick: () => { ex.weight += 2.5; queueSave(); renderExerciseList(); } }, "+")
                   )
+                ),
+                // Log column aligned
+                el('div', { class: 'adjuster-column', style: { justifyContent: 'flex-end' } },
+                  el('span', { class: 'adjuster-label', style: { visibility: 'hidden' } }, "Action"),
+                  el('button', {
+                    class: `btn log-exercise-btn ${isLogged ? 'logged' : ''}`,
+                    style: { height: '32px', padding: '0 16px', fontSize: '13px', borderRadius: 'var(--rounded-pill)' },
+                    onClick: () => {
+                      ex.logged = !isLogged;
+                      queueSave();
+                      renderExerciseList();
+                    }
+                  }, isLogged ? [icon(ICONS.check), " Logged"] : "Log")
                 )
               )
             );
@@ -2172,30 +2163,25 @@ function renderFitness() {
         )
       );
 
-      // Hydration & quick log inputs
-      const inputCard = el('div', { class: 'form-card', style: { display: 'grid', gridTemplateColumns: '1fr', gap: '16px' } },
-        el('h3', {}, "Log Metrics"),
-        el('div', { style: { display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' } },
-          el('div', { class: 'form-group', style: { flex: '1 1 180px' } },
-            el('span', { class: 'form-label' }, "Hydration (cups)"),
-            el('div', { class: 'inline-adjuster' },
-              el('button', { class: 'adjuster-btn', onClick: () => { if (day.water > 0) { day.water--; syncDailyProgress(day); queueSave(); renderFitnessSubTab('nutrition'); } } }, "−"),
-              el('span', { class: 'adjuster-value', style: { minWidth: '80px' } }, `${day.water || 0} Cups`),
-              el('button', { class: 'adjuster-btn', onClick: () => { day.water = (day.water || 0) + 1; syncDailyProgress(day); queueSave(); renderFitnessSubTab('nutrition'); } }, "+")
-            )
-          ),
-          el('div', { class: 'form-group', style: { flex: '1 1 180px', display: 'flex', flexDirection: 'column', gap: '6px' } },
-            el('span', { class: 'form-label' }, "Food Database"),
-            el('button', {
-              class: 'btn btn-primary',
-              style: { height: '34px', width: '100%' },
-              onClick: () => {
-                openFoodLogger(day);
-              }
-            }, icon(ICONS.search, "btn-icon"), "Search & Log Foods")
+      // Actions row inside progressCard (consolidated Water & Search button)
+      const actionsRow = el('div', { style: { display: 'flex', gap: '16px', alignItems: 'center', marginTop: '8px', borderTop: '1px solid var(--colors-hairline-soft)', paddingTop: '16px', flexWrap: 'wrap' } },
+        // Water
+        el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+          el('span', { style: { fontSize: '12px', fontWeight: '800', color: 'var(--colors-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' } }, "Water"),
+          el('div', { class: 'inline-adjuster' },
+            el('button', { class: 'adjuster-btn', style: { width: '28px', height: '28px', fontSize: '12px' }, onClick: () => { if (day.water > 0) { day.water--; syncDailyProgress(day); queueSave(); renderFitnessSubTab('nutrition'); } } }, "−"),
+            el('span', { class: 'adjuster-value', style: { fontSize: '14px', fontWeight: '700', minWidth: '45px', textAlign: 'center' } }, `${day.water || 0} cps`),
+            el('button', { class: 'adjuster-btn', style: { width: '28px', height: '28px', fontSize: '12px' }, onClick: () => { day.water = (day.water || 0) + 1; syncDailyProgress(day); queueSave(); renderFitnessSubTab('nutrition'); } }, "+")
           )
-        )
+        ),
+        // Search & Log Button
+        el('button', {
+          class: 'btn btn-primary',
+          style: { height: '34px', padding: '0 16px', fontSize: '12.5px', marginLeft: 'auto' },
+          onClick: () => { openFoodLogger(day); }
+        }, icon(ICONS.search, "btn-icon"), "Search & Log Foods")
       );
+      progressCard.appendChild(actionsRow);
 
       // Logged meals list
       const mealsList = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' } });
@@ -2258,11 +2244,48 @@ function renderFitness() {
         );
       });
 
+      // Recipe Builder Card
+      const recipeBuilderCard = el('div', { class: 'form-card recipe-builder-card', style: { marginTop: '24px' } },
+        el('h4', { style: { fontSize: '15px', fontWeight: '700', marginBottom: '12px' } }, "Create Custom Recipe"),
+        el('div', { class: 'recipe-builder-fields', style: { display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' } },
+          el('div', { class: 'form-group', style: { flex: '2 1 180px' } },
+            el('input', { type: 'text', class: 'form-control', placeholder: 'Recipe title (e.g., Protein Oats)', id: 'new-recipe-title', style: { height: '34px', fontSize: '13px' } })
+          ),
+          el('div', { class: 'form-group', style: { flex: '1 1 80px' } },
+            el('input', { type: 'number', class: 'form-control', placeholder: 'kcal', id: 'new-recipe-cal', style: { height: '34px', fontSize: '13px' } })
+          ),
+          el('div', { class: 'form-group', style: { flex: '1 1 80px' } },
+            el('input', { type: 'number', class: 'form-control', placeholder: 'protein (g)', id: 'new-recipe-prot', style: { height: '34px', fontSize: '13px' } })
+          )
+        ),
+        el('button', {
+          class: 'btn btn-secondary',
+          style: { height: '34px', fontSize: '13px', width: 'fit-content' },
+          onClick: () => {
+            const titleInput = document.getElementById('new-recipe-title');
+            const calInput = document.getElementById('new-recipe-cal');
+            const protInput = document.getElementById('new-recipe-prot');
+            
+            const title = titleInput ? titleInput.value.trim() : '';
+            const calories = calInput ? parseInt(calInput.value) || 0 : 0;
+            const protein = protInput ? parseInt(protInput.value) || 0 : 0;
+            
+            if (title && calories > 0) {
+              state.recipes.push({ title, calories, protein });
+              saveLocalState();
+              renderFitnessSubTab('nutrition');
+            } else {
+              alert("Please enter a valid title and calorie count.");
+            }
+          }
+        }, "Save to Library")
+      );
+
       renderMealsList();
       activeContent.appendChild(progressCard);
-      activeContent.appendChild(inputCard);
       activeContent.appendChild(mealsList);
       activeContent.appendChild(recipeShelf);
+      activeContent.appendChild(recipeBuilderCard);
     }
   };
 

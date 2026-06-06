@@ -1999,3 +1999,99 @@ textarea.form-control {
 .settings-split-row:hover {
   border-color: var(--colors-muted-soft);
 }
+
+/* Routine Chips styling */
+.routine-chips-container {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  align-items: center;
+}
+
+.routine-chip {
+  background: var(--colors-surface-card);
+  border: 1px solid var(--colors-hairline);
+  color: var(--colors-body-strong);
+  padding: 8px 16px;
+  border-radius: var(--rounded-pill);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-default);
+}
+
+.routine-chip:hover {
+  background: var(--colors-surface-soft);
+  border-color: var(--colors-muted-soft);
+  color: var(--colors-ink);
+}
+
+.routine-chip:active {
+  background: var(--colors-surface-cream-strong);
+}
+
+/* Exercise Log button & state styling */
+.log-exercise-btn {
+  background-color: var(--colors-primary);
+  color: var(--colors-on-primary);
+  border: none;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition-default);
+}
+
+.log-exercise-btn:hover:not(:disabled) {
+  background-color: var(--colors-primary-active);
+}
+
+.log-exercise-btn.logged {
+  background-color: var(--colors-success);
+  color: var(--colors-on-primary);
+}
+
+.log-exercise-btn.logged:hover {
+  background-color: #4da58e;
+}
+
+/* Card logged state highlights */
+.exercise-logger-card.logged {
+  border-left: 4px solid var(--colors-success);
+  background-color: rgba(94, 188, 163, 0.03);
+  transition: var(--transition-default);
+}
+
+.exercise-logger-card.logged .adjuster-value {
+  opacity: 0.6;
+}
+
+.exercise-logger-card.logged .adjuster-label {
+  opacity: 0.6;
+}
+
+/* Disabled adjuster button */
+.adjuster-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background-color: var(--colors-surface-soft);
+}
+
+.adjuster-btn:disabled:hover {
+  background-color: var(--colors-surface-soft);
+  color: var(--colors-ink);
+  border-color: var(--colors-hairline);
+}
+
+/* Food search logger feedback styling */
+.food-add-btn.added {
+  background-color: var(--colors-success) !important;
+  color: var(--colors-on-primary) !important;
+  border-color: var(--colors-success) !important;
+}
+
+/* Recipe builder form card */
+.recipe-builder-card {
+  border-top: 1px solid var(--colors-hairline);
+}
+
