@@ -2099,3 +2099,103 @@ textarea.form-control {
   border-top: 1px solid var(--colors-hairline);
 }
 
+.macro-progress-fg.habits {
+  background-color: var(--colors-accent-amber);
+}
+
+/* Splits Configurator inside Settings */
+.splits-configurator-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.settings-split-row {
+  background-color: var(--colors-surface-soft);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--rounded-sm);
+  border: 1px solid var(--colors-hairline);
+  transition: var(--transition-default);
+}
+
+/* Unified Habits Category Card */
+.habits-category-card {
+  background: var(--colors-surface-card);
+  border: 1px solid var(--colors-hairline);
+  border-radius: var(--rounded-lg);
+  padding: var(--spacing-md);
+  box-shadow: var(--shadow-premium);
+  display: flex;
+  flex-direction: column;
+}
+
+.habits-category-card .habits-category-header {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--colors-muted);
+  border-bottom: 1px solid var(--colors-hairline-soft);
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+}
+
+/* Sleek borderless list row */
+.habit-list-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  cursor: pointer;
+  transition: var(--transition-default);
+  border-bottom: 1px solid var(--colors-hairline-soft);
+}
+
+.habit-list-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.habit-list-row:first-child {
+  padding-top: 8px;
+}
+
+.habit-list-row .habit-title-text {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--colors-ink);
+  transition: var(--transition-default);
+}
+
+.habit-list-row:hover .habit-title-text {
+  color: var(--colors-primary);
+}
+
+.habit-list-row.completed .habit-title-text {
+  color: var(--colors-muted);
+  text-decoration: line-through;
+}
+
+.habit-list-row .habit-checkbox {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--colors-muted-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-default);
+  color: transparent;
+}
+
+.habit-list-row.completed .habit-checkbox {
+  border-color: var(--colors-success);
+  background-color: var(--colors-success);
+  color: var(--colors-on-primary);
+}
+
+.habit-list-row.completed .habit-checkbox svg {
+  stroke: var(--colors-on-primary);
+}
+
+

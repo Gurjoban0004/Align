@@ -2354,7 +2354,7 @@ function renderHabits() {
     categories[h.category].push(h);
   });
 
-  const habitsBox = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '24px' } });
+  const habitsBox = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px' } });
   const headerContainer = el('div');
 
   const renderHabitsWelcomeAndStats = () => {
@@ -2434,10 +2434,14 @@ function renderHabits() {
     }
 
     Object.keys(categories).forEach(cat => {
-      const section = el('div', { class: 'habits-category-section' },
+      const categoryCard = el('div', { class: 'habits-category-card', style: { marginBottom: '16px' } });
+      
+      categoryCard.appendChild(
         el('h4', { class: 'habits-category-header' }, cat)
       );
 
+      const listContainer = el('div', { class: 'habits-category-list' });
+      
       categories[cat].forEach(h => {
         const isCompleted = (day.habitsCompleted || []).includes(h.id);
         const streak = getHabitStreak(h.id);
@@ -2445,7 +2449,7 @@ function renderHabits() {
         const checkbox = el('div', { class: 'habit-checkbox' }, icon(ICONS.check));
         
         const row = el('div', {
-          class: `habit-row-item ${isCompleted ? 'completed' : ''}`,
+          class: `habit-list-row ${isCompleted ? 'completed' : ''}`,
           onClick: () => {
             if (!day.habitsCompleted) day.habitsCompleted = [];
             const idx = day.habitsCompleted.indexOf(h.id);
@@ -2468,10 +2472,11 @@ function renderHabits() {
             : null
         );
 
-        section.appendChild(row);
+        listContainer.appendChild(row);
       });
 
-      habitsBox.appendChild(section);
+      categoryCard.appendChild(listContainer);
+      habitsBox.appendChild(categoryCard);
     });
   };
 
