@@ -144,6 +144,7 @@ let state = {
 };
 
 let lastRenderedView = null;
+let activeSettingsTab = 'templates';
 
 // Get default empty daily logs structure
 function getEmptyDayLog() {
@@ -2933,307 +2934,441 @@ function renderSettings() {
   );
   container.appendChild(header);
 
-  // Authenticated State Indicator
-  const authCard = el('div', { class: 'form-card' },
-    el('h3', {}, "User Authentication"),
-    state.user 
-      ? el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-          el('div', {},
-            el('p', { style: { fontWeight: '700', color: 'var(--colors-ink)' } }, state.user.displayName || "Google User"),
-            el('p', { class: 'page-subtitle' }, state.user.email)
-          ),
-          el('button', {
-            class: 'btn btn-secondary',
-            onClick: async () => {
-              await firebase.signOut(firebase.auth);
-              state.user = null;
-              window.location.reload();
-            }
-          }, "Sign Out")
-        )
-      : el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-          el('p', { class: 'page-subtitle' }, "Currently in Local Sandbox mode. Authenticate to sync Firestore."),
+  const subTabs = el('div', { class: 'segmented-control', style: { marginBottom: '24px' } });
+  const settingsContent = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '24px' } });
+  
+  const renderSettingsSubView = (tab) => {
+    activeSettingsTab = tab;
+    settingsContent.replaceChildren();
+
+    subTabs.replaceChildren(
+      el('button', { 
+        class: `segmented-btn ${tab === 'templates' ? 'active' : ''}`, 
+        onClick: () => renderSettingsSubView('templates') 
+      }, "Routines & Habits"),
+      el('button', { 
+        class: `segmented-btn ${tab === 'cloud_ai' ? 'active' : ''}`, 
+        onClick: () => renderSettingsSubView('cloud_ai') 
+      }, "Cloud & AI Connect"),
+      el('button', { 
+        class: `segmented-btn ${tab === 'system' ? 'active' : ''}`, 
+        onClick: () => renderSettingsSubView('system') 
+      }, "System Hub")
+    );
+
+    if (tab === 'templates') {
+      // 1. WORKOUT SPLITS TEMPLATES
+      const splitsCard = el('div', { class: 'form-card splits-configurator-card' },
+        el('h3', {}, "Workout Splits Templates"),
+        el('p', { class: 'page-subtitle' }, "Customize your routine templates. These default values populate when you load a split in the fitness tracker.")
+      );
+
+      Object.keys(state.workoutSplit).forEach(splitName => {
+        const splitWrapper = el('div', { 
+          class: 'settings-split-wrapper', 
+          style: { borderBottom: '1px solid var(--colors-hairline)', paddingBottom: '16px', marginBottom: '16px' } 
+        },
+          el('h4', { style: { color: 'var(--colors-ink)', fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: '700', marginBottom: '12px' } }, `${splitName} Routine`)
+        );
+
+        const exercisesContainer = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } });
+
+        state.workoutSplit[splitName].forEach((ex, exIdx) => {
+          const row = el('div', { 
+            class: 'settings-split-row', 
+            style: { 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between', 
+              gap: '12px', 
+              flexWrap: 'wrap', 
+              marginBottom: '4px',
+              padding: '8px 12px',
+              backgroundColor: 'var(--colors-canvas)',
+              borderRadius: 'var(--rounded-md)',
+              border: '1px solid var(--colors-hairline-soft)'
+            } 
+          },
+            el('span', { style: { fontWeight: '700', flex: '1 1 120px', fontSize: '13.5px', color: 'var(--colors-ink)' } }, ex.name),
+            el('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '8px' } },
+              el('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '4px' } },
+                el('span', { style: { fontSize: '11px', color: 'var(--colors-muted)', textTransform: 'uppercase', fontWeight: '700' } }, "Sets"),
+                el('input', {
+                  type: 'number',
+                  class: 'form-control',
+                  style: { width: '42px', padding: '2px 4px', textAlign: 'center', height: '24px', fontSize: '12.5px' },
+                  value: ex.sets,
+                  onInput: (e) => {
+                    ex.sets = parseInt(e.target.value) || 0;
+                    saveLocalState();
+                  }
+                })
+              ),
+              el('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '4px' } },
+                el('span', { style: { fontSize: '11px', color: 'var(--colors-muted)', textTransform: 'uppercase', fontWeight: '700' } }, "Reps"),
+                el('input', {
+                  type: 'number',
+                  class: 'form-control',
+                  style: { width: '42px', padding: '2px 4px', textAlign: 'center', height: '24px', fontSize: '12.5px' },
+                  value: ex.reps,
+                  onInput: (e) => {
+                    ex.reps = parseInt(e.target.value) || 0;
+                    saveLocalState();
+                  }
+                })
+              ),
+              el('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '4px' } },
+                el('span', { style: { fontSize: '11px', color: 'var(--colors-muted)', textTransform: 'uppercase', fontWeight: '700' } }, "Wt"),
+                el('input', {
+                  type: 'number',
+                  class: 'form-control',
+                  style: { width: '50px', padding: '2px 4px', textAlign: 'center', height: '24px', fontSize: '12.5px' },
+                  value: ex.weight,
+                  onInput: (e) => {
+                    ex.weight = parseFloat(e.target.value) || 0;
+                    saveLocalState();
+                  }
+                }),
+                el('span', { style: { fontSize: '11.5px', color: 'var(--colors-muted)' } }, "kg")
+              )
+            ),
+            el('button', {
+              class: 'btn btn-text',
+              style: { color: 'var(--colors-error)', padding: '4px', margin: '0' },
+              onClick: () => {
+                state.workoutSplit[splitName].splice(exIdx, 1);
+                saveLocalState();
+                renderApp();
+              }
+            }, icon(ICONS.trash))
+          );
+          exercisesContainer.appendChild(row);
+        });
+
+        const addRow = el('div', { style: { display: 'flex', gap: '12px', marginTop: '12px', alignItems: 'center' } },
+          el('input', {
+            type: 'text',
+            placeholder: 'Add new exercise name...',
+            class: 'form-control',
+            style: { flex: '1', height: '32px', fontSize: '13px' },
+            id: `add-ex-name-${splitName.replace(/\s+/g, '-')}`
+          }),
           el('button', {
             class: 'btn btn-primary',
-            onClick: () => { window.location.hash = '#auth'; }
-          }, "Open Auth Portal")
-        )
-  );
-
-  // Firebase configurations
-  const fbConfig = firebase.getFirebaseConfig();
-  const fbConfigured = firebase.isFirebaseConfigured();
-  
-  const firebaseCard = el('div', { class: `form-card settings-key-card ${fbConfigured ? 'configured' : ''}` },
-    el('h3', {}, "Firebase Database Settings"),
-    el('p', { class: 'page-subtitle' }, "Save your Google Firebase config to cloud-sync metrics."),
-    el('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
-      el('div', { class: 'form-group' },
-        el('span', { class: 'form-label' }, "API Key"),
-        el('input', { type: 'password', class: 'form-control', value: fbConfig.apiKey || '', id: 'settings-fb-key' })
-      ),
-      el('div', { class: 'form-group' },
-        el('span', { class: 'form-label' }, "Project ID"),
-        el('input', { type: 'text', class: 'form-control', value: fbConfig.projectId || '', id: 'settings-fb-pid' })
-      )
-    ),
-    el('button', {
-      class: 'btn btn-primary',
-      style: { width: 'fit-content', marginTop: '12px' },
-      onClick: () => {
-        const key = document.getElementById('settings-fb-key').value.trim();
-        const pid = document.getElementById('settings-fb-pid').value.trim();
-        if (key && pid) {
-          const config = {
-            apiKey: key,
-            projectId: pid,
-            authDomain: `${pid}.firebaseapp.com`,
-            storageBucket: `${pid}.appspot.com`,
-            messagingSenderId: "123456789",
-            appId: `1:${pid}:web:12345`
-          };
-          firebase.saveFirebaseConfig(config);
-          alert("Firebase credentials configured. App will reload to sync.");
-          firebase.reinitializeFirebase();
-        } else {
-          firebase.saveFirebaseConfig(null);
-          alert("Firebase config cleared. Sandbox fallback active.");
-          window.location.reload();
-        }
-      }
-    }, fbConfigured ? "Update Config" : "Save Credentials")
-  );
-
-  // Gemini API Key obfuscated form
-  const geminiKey = gemini.getGeminiKey();
-  const geminiConfigured = !!geminiKey;
-
-  const geminiCard = el('div', { class: `form-card settings-key-card ${geminiConfigured ? 'configured' : ''}` },
-    el('h3', {}, "Gemini AI Engine Key"),
-    el('p', { class: 'page-subtitle' }, "Input your Gemini API key to enable direct AI health coaching feedback on the Dashboard. Get your key free at Google AI Studio."),
-    el('div', { class: 'form-group' },
-      el('span', { class: 'form-label' }, "API Key"),
-      el('input', { 
-        type: 'password', 
-        class: 'form-control', 
-        value: geminiKey || '', 
-        id: 'settings-gemini-key',
-        placeholder: geminiConfigured ? '••••••••••••••••••••••••••••••••••••' : 'AIzaSy...'
-      })
-    ),
-    el('button', {
-      class: 'btn btn-primary',
-      style: { width: 'fit-content', marginTop: '12px' },
-      onClick: () => {
-        const keyVal = document.getElementById('settings-gemini-key').value.trim();
-        if (keyVal) {
-          gemini.saveGeminiKey(keyVal);
-          alert("Gemini key saved securely (obfuscated against browser memory extraction).");
-          window.location.reload();
-        } else {
-          gemini.saveGeminiKey('');
-          alert("Gemini API key cleared.");
-          window.location.reload();
-        }
-      }
-    }, geminiConfigured ? "Update AI Key" : "Save AI Key")
-  );
-
-  // Reset database options
-  const dangerCard = el('div', { class: 'form-card', style: { borderLeft: '4px solid var(--colors-error)' } },
-    el('h3', { style: { color: 'var(--colors-error)' } }, "System Maintenance"),
-    el('p', { class: 'page-subtitle' }, "Danger zone: clear local cache logs, resets habits splits and books database."),
-    el('button', {
-      class: 'btn btn-accent',
-      style: { width: 'fit-content', backgroundColor: 'var(--colors-error)' },
-      onClick: () => {
-        if (confirm("Reset application? All local mock data will be deleted.")) {
-          localStorage.removeItem('life_tracker_redesign_logs');
-          localStorage.removeItem('life_tracker_redesign_splits');
-          localStorage.removeItem('life_tracker_redesign_habits_list');
-          localStorage.removeItem('life_tracker_redesign_recipes');
-          localStorage.removeItem('life_tracker_redesign_books');
-          localStorage.removeItem('life_tracker_redesign_movies');
-          window.location.reload();
-        }
-      }
-    }, "Clear Local Cache Logs")
-  );
-
-  // Splits Configurator Card
-  const splitsCard = el('div', { class: 'form-card splits-configurator-card' },
-    el('h3', {}, "Workout Splits Configurator"),
-    el('p', { class: 'page-subtitle' }, "Customize your routine templates. These default values populate when you load a split in the fitness tracker.")
-  );
-
-  Object.keys(state.workoutSplit).forEach(splitName => {
-    const splitWrapper = el('div', { class: 'settings-split-wrapper', style: { borderBottom: '1px solid var(--colors-hairline)', paddingBottom: '16px', marginBottom: '16px' } },
-      el('h4', { style: { color: 'var(--colors-primary)', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, 
-        splitName
-      )
-    );
-
-    const exercisesContainer = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } });
-
-    state.workoutSplit[splitName].forEach((ex, exIdx) => {
-      const row = el('div', { class: 'settings-split-row', style: { display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '8px' } },
-        el('span', { style: { fontWeight: '700', flex: '1 1 120px', fontSize: '13.5px' } }, ex.name),
-        el('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px' } },
-          el('span', { style: { fontSize: '12px', color: 'var(--colors-muted)' } }, "Sets"),
-          el('input', {
-            type: 'number',
-            class: 'form-control',
-            style: { width: '50px', padding: '2px 4px', textAlign: 'center', height: '26px' },
-            value: ex.sets,
-            onInput: (e) => {
-              ex.sets = parseInt(e.target.value) || 0;
-              saveLocalState();
+            style: { padding: '4px 16px', fontSize: '12.5px', height: '32px' },
+            onClick: () => {
+              const inputEl = document.getElementById(`add-ex-name-${splitName.replace(/\s+/g, '-')}`);
+              const name = inputEl.value.trim();
+              if (name) {
+                state.workoutSplit[splitName].push({ name, sets: 3, reps: 10, weight: 20 });
+                saveLocalState();
+                renderApp();
+              }
             }
-          })
-        ),
-        el('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px' } },
-          el('span', { style: { fontSize: '12px', color: 'var(--colors-muted)' } }, "Reps"),
-          el('input', {
-            type: 'number',
-            class: 'form-control',
-            style: { width: '50px', padding: '2px 4px', textAlign: 'center', height: '26px' },
-            value: ex.reps,
-            onInput: (e) => {
-              ex.reps = parseInt(e.target.value) || 0;
-              saveLocalState();
-            }
-          })
-        ),
-        el('div', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px' } },
-          el('span', { style: { fontSize: '12px', color: 'var(--colors-muted)' } }, "Weight"),
-          el('input', {
-            type: 'number',
-            class: 'form-control',
-            style: { width: '60px', padding: '2px 4px', textAlign: 'center', height: '26px' },
-            value: ex.weight,
-            onInput: (e) => {
-              ex.weight = parseFloat(e.target.value) || 0;
-              saveLocalState();
-            }
-          }),
-          el('span', { style: { fontSize: '12px', color: 'var(--colors-muted)' } }, "kg")
+          }, "Add")
+        );
+
+        splitWrapper.appendChild(exercisesContainer);
+        splitWrapper.appendChild(addRow);
+        splitsCard.appendChild(splitWrapper);
+      });
+
+      // 2. DAILY HABITS MANAGER
+      const habitsList = getHabitDefinitions();
+      const habitsCard = el('div', { class: 'form-card splits-configurator-card', style: { marginTop: '24px' } },
+        el('h3', {}, "Daily Habits Checklist Definitions"),
+        el('p', { class: 'page-subtitle' }, "Configure custom habits definitions. Custom checklist items immediately show up in your trackers.")
+      );
+
+      const habitsListContainer = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px' } });
+      const categories = { Mind: [], Fitness: [], Health: [], Nutrition: [] };
+      habitsList.forEach((h, hIdx) => {
+        if (categories[h.category]) {
+          categories[h.category].push({ habit: h, realIndex: hIdx });
+        }
+      });
+
+      Object.keys(categories).forEach(cat => {
+        const listForCat = categories[cat];
+        if (listForCat.length > 0) {
+          const catBox = el('div', { 
+            style: { 
+              padding: '12px 16px', 
+              backgroundColor: 'var(--colors-canvas)', 
+              borderRadius: 'var(--rounded-lg)', 
+              border: '1px solid var(--colors-hairline-soft)' 
+            } 
+          });
+          catBox.appendChild(el('h4', { 
+            style: { 
+              margin: '0 0 8px 0', 
+              fontSize: '11px', 
+              fontWeight: '800', 
+              textTransform: 'uppercase', 
+              letterSpacing: '0.06em', 
+              color: '#9c6518'
+            } 
+          }, cat));
+          
+          const listRows = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px' } });
+          listForCat.forEach(({ habit, realIndex }) => {
+            const row = el('div', { 
+              style: { 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between', 
+                padding: '6px 0', 
+                borderBottom: '1px solid rgba(0,0,0,0.03)' 
+              } 
+            },
+              el('span', { style: { fontWeight: '600', fontSize: '13.5px', color: 'var(--colors-ink)' } }, habit.title),
+              el('button', {
+                class: 'btn btn-text',
+                style: { color: 'var(--colors-error)', padding: '2px' },
+                onClick: () => {
+                  habitsList.splice(realIndex, 1);
+                  saveHabitDefinitions(habitsList);
+                  saveLocalState();
+                  renderApp();
+                }
+              }, icon(ICONS.trash))
+            );
+            listRows.appendChild(row);
+          });
+          catBox.appendChild(listRows);
+          habitsListContainer.appendChild(catBox);
+        }
+      });
+
+      const addHabitRow = el('div', { style: { display: 'flex', gap: '12px', marginTop: '16px', alignItems: 'center', flexWrap: 'wrap' } },
+        el('input', {
+          type: 'text',
+          placeholder: 'New habit title (e.g. Read 15 mins)...',
+          class: 'form-control',
+          style: { flex: '2 1 200px', height: '32px', fontSize: '13px' },
+          id: 'settings-new-habit-title'
+        }),
+        el('select', {
+          class: 'form-control',
+          style: { flex: '1 1 100px', height: '32px', fontSize: '13px', padding: '0 4px' },
+          id: 'settings-new-habit-cat'
+        },
+          el('option', { value: 'Mind' }, "Mind"),
+          el('option', { value: 'Fitness' }, "Fitness"),
+          el('option', { value: 'Health' }, "Health"),
+          el('option', { value: 'Nutrition' }, "Nutrition")
         ),
         el('button', {
-          class: 'btn btn-text',
-          style: { color: 'var(--colors-error)', padding: '2px', marginLeft: 'auto' },
+          class: 'btn btn-primary',
+          style: { padding: '4px 16px', fontSize: '12.5px', height: '32px' },
           onClick: () => {
-            state.workoutSplit[splitName].splice(exIdx, 1);
-            saveLocalState();
-            renderApp();
+            const titleInput = document.getElementById('settings-new-habit-title');
+            const catSelect = document.getElementById('settings-new-habit-cat');
+            const title = titleInput ? titleInput.value.trim() : '';
+            const cat = catSelect ? catSelect.value : 'Mind';
+            
+            if (title) {
+              const newId = `h-${Date.now()}`;
+              habitsList.push({ id: newId, title, category: cat });
+              saveHabitDefinitions(habitsList);
+              saveLocalState();
+              renderApp();
+            }
           }
-        }, icon(ICONS.trash))
+        }, "Add")
       );
-      exercisesContainer.appendChild(row);
-    });
 
-    const addRow = el('div', { style: { display: 'flex', gap: '12px', marginTop: '12px', alignItems: 'center' } },
-      el('input', {
-        type: 'text',
-        placeholder: 'Add new exercise name...',
-        class: 'form-control',
-        style: { flex: '1', height: '28px', fontSize: '13px' },
-        id: `add-ex-name-${splitName.replace(/\s+/g, '-')}`
-      }),
-      el('button', {
-        class: 'btn btn-primary',
-        style: { padding: '4px 12px', fontSize: '12.5px', height: '28px' },
-        onClick: () => {
-          const inputEl = document.getElementById(`add-ex-name-${splitName.replace(/\s+/g, '-')}`);
-          const name = inputEl.value.trim();
-          if (name) {
-            state.workoutSplit[splitName].push({ name, sets: 3, reps: 10, weight: 20 });
-            saveLocalState();
-            renderApp();
+      habitsCard.appendChild(habitsListContainer);
+      habitsCard.appendChild(addHabitRow);
+
+      settingsContent.appendChild(splitsCard);
+      settingsContent.appendChild(habitsCard);
+
+    } else if (tab === 'cloud_ai') {
+      // 1. AUTHENTICATION CARD
+      const authCard = el('div', { class: 'form-card' },
+        el('h3', {}, "User Authentication"),
+        state.user 
+          ? el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+              el('div', {},
+                el('p', { style: { fontWeight: '700', color: 'var(--colors-ink)' } }, state.user.displayName || "Google User"),
+                el('p', { class: 'page-subtitle' }, state.user.email)
+              ),
+              el('button', {
+                class: 'btn btn-secondary',
+                onClick: async () => {
+                  await firebase.signOut(firebase.auth);
+                  state.user = null;
+                  window.location.reload();
+                }
+              }, "Sign Out")
+            )
+          : el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+              el('p', { class: 'page-subtitle' }, "Currently in Local Sandbox mode. Authenticate to sync Firestore."),
+              el('button', {
+                class: 'btn btn-primary',
+                onClick: () => { window.location.hash = '#auth'; }
+              }, "Open Auth Portal")
+            )
+      );
+
+      // 2. FIREBASE CARD
+      const fbConfig = firebase.getFirebaseConfig();
+      const fbConfigured = firebase.isFirebaseConfigured();
+      
+      const firebaseCard = el('div', { class: `form-card settings-key-card ${fbConfigured ? 'configured' : ''}` },
+        el('h3', {}, "Firebase Database Settings"),
+        el('p', { class: 'page-subtitle' }, "Save your Google Firebase config to cloud-sync metrics."),
+        el('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
+          el('div', { class: 'form-group' },
+            el('span', { class: 'form-label' }, "API Key"),
+            el('input', { type: 'password', class: 'form-control', value: fbConfig.apiKey || '', id: 'settings-fb-key' })
+          ),
+          el('div', { class: 'form-group' },
+            el('span', { class: 'form-label' }, "Project ID"),
+            el('input', { type: 'text', class: 'form-control', value: fbConfig.projectId || '', id: 'settings-fb-pid' })
+          )
+        ),
+        el('button', {
+          class: 'btn btn-primary',
+          style: { width: 'fit-content', marginTop: '12px' },
+          onClick: () => {
+            const key = document.getElementById('settings-fb-key').value.trim();
+            const pid = document.getElementById('settings-fb-pid').value.trim();
+            if (key && pid) {
+              const config = {
+                apiKey: key,
+                projectId: pid,
+                authDomain: `${pid}.firebaseapp.com`,
+                storageBucket: `${pid}.appspot.com`,
+                messagingSenderId: "123456789",
+                appId: `1:${pid}:web:12345`
+              };
+              firebase.saveFirebaseConfig(config);
+              alert("Firebase credentials configured. App will reload to sync.");
+              firebase.reinitializeFirebase();
+            } else {
+              firebase.saveFirebaseConfig(null);
+              alert("Firebase config cleared. Sandbox fallback active.");
+              window.location.reload();
+            }
           }
-        }
-      }, "Add")
-    );
+        }, fbConfigured ? "Update Config" : "Save Credentials")
+      );
 
-    splitWrapper.appendChild(exercisesContainer);
-    splitWrapper.appendChild(addRow);
-    splitsCard.appendChild(splitWrapper);
-  });
+      // 3. GEMINI CARD
+      const geminiKey = gemini.getGeminiKey();
+      const geminiConfigured = !!geminiKey;
 
-  // Daily Habits Manager Card
-  const habitsList = getHabitDefinitions();
-  const habitsCard = el('div', { class: 'form-card splits-configurator-card' },
-    el('h3', {}, "Daily Habits Manager"),
-    el('p', { class: 'page-subtitle' }, "Configure your daily checklist items. Custom habits will immediately appear in your trackers.")
-  );
+      const geminiCard = el('div', { class: `form-card settings-key-card ${geminiConfigured ? 'configured' : ''}` },
+        el('h3', {}, "Gemini AI Engine Key"),
+        el('p', { class: 'page-subtitle' }, "Input your Gemini API key to enable direct AI health coaching feedback on the Dashboard. Get your key free at Google AI Studio."),
+        el('div', { class: 'form-group' },
+          el('span', { class: 'form-label' }, "API Key"),
+          el('input', { 
+            type: 'password', 
+            class: 'form-control', 
+            value: geminiKey || '', 
+            id: 'settings-gemini-key',
+            placeholder: geminiConfigured ? '••••••••••••••••••••••••••••••••••••' : 'AIzaSy...'
+          })
+        ),
+        el('button', {
+          class: 'btn btn-primary',
+          style: { width: 'fit-content', marginTop: '12px' },
+          onClick: () => {
+            const keyVal = document.getElementById('settings-gemini-key').value.trim();
+            if (keyVal) {
+              gemini.saveGeminiKey(keyVal);
+              alert("Gemini key saved securely (obfuscated against browser memory extraction).");
+              window.location.reload();
+            } else {
+              gemini.saveGeminiKey('');
+              alert("Gemini API key cleared.");
+              window.location.reload();
+            }
+          }
+        }, geminiConfigured ? "Update AI Key" : "Save AI Key")
+      );
 
-  const habitsListContainer = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } });
-  habitsList.forEach((h, hIdx) => {
-    const row = el('div', { class: 'settings-split-row', style: { display: 'flex', alignItems: 'center', gap: '12px', justifyContent: 'space-between' } },
-      el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
-        el('span', { style: { fontSize: '11px', fontWeight: '800', background: 'var(--colors-surface-soft)', color: 'var(--colors-ink)', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' } }, h.category),
-        el('span', { style: { fontWeight: '700', fontSize: '13.5px', color: 'var(--colors-ink)' } }, h.title)
-      ),
-      el('button', {
-        class: 'btn btn-text',
-        style: { color: 'var(--colors-error)', padding: '2px' },
-        onClick: () => {
-          habitsList.splice(hIdx, 1);
-          saveHabitDefinitions(habitsList);
-          saveLocalState();
-          renderApp();
-        }
-      }, icon(ICONS.trash))
-    );
-    habitsListContainer.appendChild(row);
-  });
+      settingsContent.appendChild(authCard);
+      settingsContent.appendChild(firebaseCard);
+      settingsContent.appendChild(geminiCard);
 
-  const addHabitRow = el('div', { style: { display: 'flex', gap: '12px', marginTop: '16px', alignItems: 'center', flexWrap: 'wrap' } },
-    el('input', {
-      type: 'text',
-      placeholder: 'New habit title (e.g. Read 15 mins)...',
-      class: 'form-control',
-      style: { flex: '2 1 200px', height: '32px', fontSize: '13px' },
-      id: 'settings-new-habit-title'
-    }),
-    el('select', {
-      class: 'form-control',
-      style: { flex: '1 1 100px', height: '32px', fontSize: '13px', padding: '0 4px' },
-      id: 'settings-new-habit-cat'
-    },
-      el('option', { value: 'Mind' }, "Mind"),
-      el('option', { value: 'Fitness' }, "Fitness"),
-      el('option', { value: 'Health' }, "Health"),
-      el('option', { value: 'Nutrition' }, "Nutrition")
-    ),
-    el('button', {
-      class: 'btn btn-primary',
-      style: { padding: '4px 16px', fontSize: '12.5px', height: '32px' },
-      onClick: () => {
-        const titleInput = document.getElementById('settings-new-habit-title');
-        const catSelect = document.getElementById('settings-new-habit-cat');
-        const title = titleInput ? titleInput.value.trim() : '';
-        const cat = catSelect ? catSelect.value : 'Mind';
-        
-        if (title) {
-          const newId = `h-${Date.now()}`;
-          habitsList.push({ id: newId, title, category: cat });
-          saveHabitDefinitions(habitsList);
-          saveLocalState();
-          renderApp();
-        }
-      }
-    }, "Add")
-  );
+    } else if (tab === 'system') {
+      // Diagnostics tiles
+      const habitsList = getHabitDefinitions();
+      
+      const diagnosticsGrid = el('div', { 
+        style: { 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(2, 1fr)', 
+          gap: '12px', 
+          marginBottom: '20px' 
+        } 
+      },
+        el('div', { class: 'trend-tile', style: { margin: '0', padding: '12px' } },
+          el('span', { class: 'trend-tile-label', style: { fontSize: '11px' } }, "Daily Logs"),
+          el('strong', { class: 'trend-tile-value', style: { fontSize: '18px' } }, Object.keys(state.logs).length),
+          el('span', { class: 'trend-tile-meta', style: { fontSize: '10px' } }, "tracked history")
+        ),
+        el('div', { class: 'trend-tile', style: { margin: '0', padding: '12px' } },
+          el('span', { class: 'trend-tile-label', style: { fontSize: '11px' } }, "Habits Checklist"),
+          el('strong', { class: 'trend-tile-value', style: { fontSize: '18px' } }, habitsList.length),
+          el('span', { class: 'trend-tile-meta', style: { fontSize: '10px' } }, "daily checklist items")
+        ),
+        el('div', { class: 'trend-tile', style: { margin: '0', padding: '12px' } },
+          el('span', { class: 'trend-tile-label', style: { fontSize: '11px' } }, "Routines Templates"),
+          el('strong', { class: 'trend-tile-value', style: { fontSize: '18px' } }, Object.keys(state.workoutSplit).length),
+          el('span', { class: 'trend-tile-meta', style: { fontSize: '10px' } }, "splits routines templates")
+        ),
+        el('div', { class: 'trend-tile', style: { margin: '0', padding: '12px' } },
+          el('span', { class: 'trend-tile-label', style: { fontSize: '11px' } }, "Recipes Library"),
+          el('strong', { class: 'trend-tile-value', style: { fontSize: '18px' } }, state.recipes.length),
+          el('span', { class: 'trend-tile-meta', style: { fontSize: '10px' } }, "saved food recipes")
+        ),
+        el('div', { class: 'trend-tile', style: { margin: '0', padding: '12px' } },
+          el('span', { class: 'trend-tile-label', style: { fontSize: '11px' } }, "Library Books"),
+          el('strong', { class: 'trend-tile-value', style: { fontSize: '18px' } }, state.books.length),
+          el('span', { class: 'trend-tile-meta', style: { fontSize: '10px' } }, "books shelf count")
+        ),
+        el('div', { class: 'trend-tile', style: { margin: '0', padding: '12px' } },
+          el('span', { class: 'trend-tile-label', style: { fontSize: '11px' } }, "Logged Movies"),
+          el('strong', { class: 'trend-tile-value', style: { fontSize: '18px' } }, state.movies.length),
+          el('span', { class: 'trend-tile-meta', style: { fontSize: '10px' } }, "movies logs count")
+        )
+      );
 
-  habitsCard.appendChild(habitsListContainer);
-  habitsCard.appendChild(addHabitRow);
+      // Danger card
+      const dangerCard = el('div', { class: 'form-card', style: { borderLeft: '4px solid var(--colors-error)' } },
+        el('h3', { style: { color: 'var(--colors-error)' } }, "System Maintenance"),
+        el('p', { class: 'page-subtitle' }, "Danger zone: clear local cache logs, resets habits splits and books database."),
+        el('button', {
+          class: 'btn btn-accent',
+          style: { width: 'fit-content', backgroundColor: 'var(--colors-error)' },
+          onClick: () => {
+            if (confirm("Reset application? All local mock data will be deleted.")) {
+              localStorage.removeItem('life_tracker_redesign_logs');
+              localStorage.removeItem('life_tracker_redesign_splits');
+              localStorage.removeItem('life_tracker_redesign_habits_list');
+              localStorage.removeItem('life_tracker_redesign_recipes');
+              localStorage.removeItem('life_tracker_redesign_books');
+              localStorage.removeItem('life_tracker_redesign_movies');
+              window.location.reload();
+            }
+          }
+        }, "Clear Local Cache Logs")
+      );
 
-  container.appendChild(authCard);
-  container.appendChild(firebaseCard);
-  container.appendChild(splitsCard);
-  container.appendChild(habitsCard);
-  container.appendChild(geminiCard);
-  container.appendChild(dangerCard);
+      settingsContent.appendChild(diagnosticsGrid);
+      settingsContent.appendChild(dangerCard);
+    }
+  };
+
+  renderSettingsSubView(activeSettingsTab);
+
+  container.appendChild(subTabs);
+  container.appendChild(settingsContent);
   settingsWrapper.appendChild(container);
   return settingsWrapper;
 }
