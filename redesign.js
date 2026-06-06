@@ -1510,68 +1510,100 @@ function renderDashboard() {
         dotsContainer
       );
       
-      weeklyStripGrid.appendChild(dayBtn);
+          weeklyStripGrid.appendChild(dayBtn);
     }
     calendarStrip.appendChild(weeklyStripGrid);
 
-    // Readiness widget ring SVG details
-    const radius = 54;
-    const circ = 2 * Math.PI * radius;
-    const progressOffset = circ - (Math.min(dailyScore, 100) / 100 * circ);
-    
+    // Readiness widget concentric rings SVG calculations
+    const stepsDone = day.steps || 0;
+    const stepsGoal = 10000;
+    const stepsPercent = Math.min(1, stepsDone / stepsGoal);
+    const stepsDash = stepsPercent * 311.02;
+
+    const habitsTotal = habits.length;
+    const habitsPercent = habitsTotal ? Math.min(1, habitsDone / habitsTotal) : 0;
+    const habitsDash = habitsPercent * 235.62;
+
+    const waterDone = day.water || 0;
+    const waterGoal = 8;
+    const waterPercent = Math.min(1, waterDone / waterGoal);
+    const waterDash = waterPercent * 160.22;
+
     const readinessRingSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     readinessRingSvg.setAttribute("class", "readiness-score-ring");
-    readinessRingSvg.setAttribute("width", "130");
-    readinessRingSvg.setAttribute("height", "130");
-    
-    const trackRing = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    trackRing.setAttribute("cx", "65");
-    trackRing.setAttribute("cy", "65");
-    trackRing.setAttribute("r", radius);
-    trackRing.setAttribute("stroke", "var(--colors-surface-soft)");
-    trackRing.setAttribute("stroke-width", "8");
-    trackRing.setAttribute("fill", "none");
-    
-    const fillRing = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    fillRing.setAttribute("cx", "65");
-    fillRing.setAttribute("cy", "65");
-    fillRing.setAttribute("r", radius);
-    fillRing.setAttribute("stroke", dailyScore >= 75 ? "var(--colors-accent-teal)" : "var(--colors-accent-terracotta)");
-    fillRing.setAttribute("stroke-width", "8");
-    fillRing.setAttribute("stroke-dasharray", `${circ}`);
-    fillRing.setAttribute("stroke-dashoffset", `${progressOffset}`);
-    fillRing.setAttribute("stroke-linecap", "round");
-    fillRing.setAttribute("fill", "none");
+    readinessRingSvg.setAttribute("viewBox", "0 0 160 160");
+    readinessRingSvg.setAttribute("width", "140");
+    readinessRingSvg.setAttribute("height", "140");
 
-    readinessRingSvg.appendChild(trackRing);
-    readinessRingSvg.appendChild(fillRing);
+    function createArcRing(r, color, trackLen, circ, progressDash) {
+      const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+      
+      // Track
+      const track = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      track.setAttribute("cx", "80");
+      track.setAttribute("cy", "80");
+      track.setAttribute("r", r.toString());
+      track.setAttribute("stroke", "var(--colors-surface-soft)");
+      track.setAttribute("stroke-width", "8");
+      track.setAttribute("stroke-linecap", "round");
+      track.setAttribute("fill", "none");
+      track.setAttribute("stroke-dasharray", `${trackLen} ${circ}`);
+      track.setAttribute("transform", "rotate(135, 80, 80)");
+      g.appendChild(track);
 
-    let readinessVerdict = "Focus Needed";
-    if (dailyScore >= 80) readinessVerdict = "Peak Performance";
-    else if (dailyScore >= 60) readinessVerdict = "Building Momentum";
+      // Progress
+      if (progressDash > 0) {
+        const fill = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        fill.setAttribute("cx", "80");
+        fill.setAttribute("cy", "80");
+        fill.setAttribute("r", r.toString());
+        fill.setAttribute("stroke", color);
+        fill.setAttribute("fill", "none");
+        fill.setAttribute("stroke-width", "8");
+        fill.setAttribute("stroke-linecap", "round");
+        fill.setAttribute("stroke-dasharray", `${progressDash} ${circ}`);
+        fill.setAttribute("transform", "rotate(135, 80, 80)");
+        g.appendChild(fill);
+      }
+
+      return g;
+    }
+
+    readinessRingSvg.appendChild(createArcRing(66, "var(--colors-accent-teal)", 311.02, 414.69, stepsDash));
+    readinessRingSvg.appendChild(createArcRing(50, "var(--colors-accent-amber)", 235.62, 314.16, habitsDash));
+    readinessRingSvg.appendChild(createArcRing(34, "var(--colors-accent-blue)", 160.22, 213.63, waterDash));
+
+    const summaryPills = el('div', { class: 'readiness-metrics-summary' },
+      el('div', { class: 'summary-pill steps' },
+        el('span', { class: 'summary-dot steps' }),
+        el('span', { class: 'summary-label' }, 'Steps '),
+        el('strong', { class: 'summary-value' }, `${stepsDone.toLocaleString()}`)
+      ),
+      el('div', { class: 'summary-pill habits' },
+        el('span', { class: 'summary-dot habits' }),
+        el('span', { class: 'summary-label' }, 'Habits '),
+        el('strong', { class: 'summary-value' }, `${habitsDone}/${habitsTotal}`)
+      ),
+      el('div', { class: 'summary-pill water' },
+        el('span', { class: 'summary-dot water' }),
+        el('span', { class: 'summary-label' }, 'Water '),
+        el('strong', { class: 'summary-value' }, `${waterDone}/8`)
+      )
+    );
 
     const readinessCard = el('div', { class: 'readiness-widget' },
+      summaryPills,
       el('div', { class: 'readiness-score-container' },
         readinessRingSvg,
         el('div', { class: 'readiness-score-value' },
           el('strong', {}, dailyScore),
           el('span', {}, "SCORE")
         )
-      ),
-      el('div', { class: 'readiness-info' },
-        el('span', { class: 'readiness-status-tag' }, readinessVerdict),
-        el('h2', { class: 'readiness-headline' }, 
-          dailyScore >= 70 
-            ? "Your consistency triggers progress." 
-            : "Fuel the habits. Log steps or water to accelerate."
-        ),
-        el('p', { class: 'readiness-description' }, 
-          `Completed ${habitsDone}/${habits.length} habits today. Calories are at ${day.calories || 0} kcal, with a steps log of ${day.steps.toLocaleString()}.`
-        )
       )
     );
 
     // 30-Day Consistency Grid Widget
+// 30-Day Consistency Grid Widget
     const consistencyGrid = el('div', { class: 'consistency-widget' },
       el('div', { class: 'consistency-widget-header' },
         el('h3', {}, "Consistency Matrix"),
@@ -1747,11 +1779,14 @@ function renderDashboard() {
     );
 
     return el('div', { class: 'dashboard-left' },
-      calendarStrip,
       readinessCard,
       metricsContainer,
-      consistencyGrid
+      consistencyGrid,
+      calendarStrip
     );
+
+
+
   };
 
   // --- SUB TAB: AI COACH & TRENDS ---
