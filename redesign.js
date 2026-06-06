@@ -2494,6 +2494,52 @@ function renderHabits() {
 // --- VIEW: EDIT BOOK MODAL (BOTTOM SHEET) ---
 function openEditBookModal(b, onSave) {
   showBottomSheet('Edit Book Details', (body, dismiss) => {
+    const percent = Math.min(100, Math.round((b.pagesRead / b.totalPages) * 100));
+
+    // Show nice details header on top
+    body.appendChild(el('div', { 
+      style: { 
+        padding: '16px', 
+        marginBottom: '20px', 
+        backgroundColor: 'var(--colors-canvas)', 
+        borderRadius: 'var(--rounded-lg)',
+        border: '1px solid var(--colors-hairline)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px'
+      } 
+    },
+      el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+        el('span', { 
+          style: { 
+            fontSize: '10px', 
+            fontWeight: '800', 
+            textTransform: 'uppercase', 
+            letterSpacing: '0.08em',
+            padding: '4px 8px', 
+            borderRadius: 'var(--rounded-pill)',
+            backgroundColor: 'rgba(180, 120, 20, 0.08)',
+            color: '#9c6518',
+            border: '1px solid rgba(180, 120, 20, 0.2)'
+          } 
+        }, b.status),
+        el('span', { style: { fontSize: '12.5px', color: 'var(--colors-muted)', fontWeight: '600' } }, `${percent}% Complete`)
+      ),
+      el('h2', { style: { fontFamily: 'var(--font-display)', fontSize: '24px', fontWeight: '800', margin: '0', color: 'var(--colors-ink)', lineHeight: '1.25' } }, b.title),
+      el('span', { style: { fontSize: '14px', color: 'var(--colors-body)', fontStyle: 'italic' } }, `by ${b.author}`),
+      
+      // Progress Bar
+      el('div', { style: { marginTop: '8px' } },
+        el('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px', fontWeight: '600', color: 'var(--colors-ink)' } },
+          el('span', {}, "Reading Progression"),
+          el('strong', {}, `${b.pagesRead} of ${b.totalPages} pages`)
+        ),
+        el('div', { class: 'macro-progress-bg' },
+          el('div', { class: 'macro-progress-fg', style: { width: `${percent}%`, backgroundColor: 'var(--colors-accent-blue)' } })
+        )
+      )
+    ));
+
     body.appendChild(el('div', { class: 'form-group', style: { marginBottom: '12px' } },
       el('span', { class: 'form-label' }, "Book Title"),
       el('input', { type: 'text', class: 'form-control', value: b.title, id: 'edit-book-title' })
@@ -2568,6 +2614,48 @@ function openEditBookModal(b, onSave) {
 // --- VIEW: EDIT MOVIE MODAL (BOTTOM SHEET) ---
 function openEditMovieModal(m, onSave) {
   showBottomSheet('Edit Movie Log', (body, dismiss) => {
+    let stars = '';
+    for (let i = 0; i < m.rating; i++) stars += '★';
+    for (let i = m.rating; i < 5; i++) stars += '☆';
+
+    // Details block on top
+    body.appendChild(el('div', { 
+      style: { 
+        padding: '16px', 
+        marginBottom: '20px', 
+        backgroundColor: 'var(--colors-canvas)', 
+        borderRadius: 'var(--rounded-lg)',
+        border: '1px solid var(--colors-hairline)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px'
+      } 
+    },
+      el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+        el('span', { 
+          style: { 
+            fontSize: '10px', 
+            fontWeight: '800', 
+            textTransform: 'uppercase', 
+            letterSpacing: '0.08em',
+            padding: '4px 8px', 
+            borderRadius: 'var(--rounded-pill)',
+            backgroundColor: 'rgba(180, 120, 20, 0.08)',
+            color: '#9c6518',
+            border: '1px solid rgba(180, 120, 20, 0.2)'
+          } 
+        }, m.status || 'watched'),
+        el('span', { style: { fontSize: '14px', color: 'var(--colors-accent-amber)' } }, stars)
+      ),
+      el('h2', { style: { fontFamily: 'var(--font-display)', fontSize: '24px', fontWeight: '800', margin: '0', color: 'var(--colors-ink)', lineHeight: '1.25' } }, m.title),
+      el('span', { style: { fontSize: '13.5px', color: 'var(--colors-muted)' } }, `Released in ${m.year}`),
+      
+      el('div', { style: { marginTop: '8px', borderLeft: '3px solid var(--colors-accent-amber)', paddingLeft: '10px' } },
+        el('span', { style: { fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--colors-muted)', display: 'block', marginBottom: '2px', fontWeight: '700' } }, "Your Review"),
+        el('p', { style: { fontSize: '14px', fontStyle: 'italic', color: 'var(--colors-body)', margin: '0', lineHeight: '1.4' } }, m.review || 'No review logged.')
+      )
+    ));
+
     body.appendChild(el('div', { class: 'form-group', style: { marginBottom: '12px' } },
       el('span', { class: 'form-label' }, "Movie Title"),
       el('input', { type: 'text', class: 'form-control', value: m.title, id: 'edit-movie-title' })
@@ -2656,43 +2744,41 @@ function renderMedia() {
     if (tab === 'books') {
       const bookGrid = el('div', { class: 'vault-shelves-grid' });
       state.books.forEach(b => {
-        const percent = Math.min(100, Math.round((b.pagesRead / b.totalPages) * 100));
-        
         bookGrid.appendChild(
-          el('div', { class: 'vault-item-card', style: { padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' } },
-            el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+          el('div', { 
+            class: 'vault-item-card', 
+            style: { 
+              padding: '16px 20px', 
+              display: 'flex', 
+              flexDirection: 'row', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              gap: '20px', 
+              cursor: 'pointer' 
+            },
+            onClick: () => {
+              openEditBookModal(b, () => renderMediaSubView('books'));
+            }
+          },
+            el('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
+              el('h3', { style: { fontFamily: 'var(--font-display)', fontSize: '20px', fontWeight: '700', margin: '0', color: 'var(--colors-ink)', lineHeight: '1.25' } }, b.title),
+              el('span', { style: { fontSize: '13.5px', color: 'var(--colors-muted)' } }, `by ${b.author}`)
+            ),
+            el('div', { style: { display: 'flex', alignItems: 'center', gap: '16px' } },
+              el('span', { style: { fontSize: '13px', fontWeight: '600', color: 'var(--colors-ink)' } }, `${b.pagesRead} / ${b.totalPages} pages done`),
               el('span', { 
                 style: { 
-                  fontSize: '11px', 
+                  fontSize: '10px', 
                   fontWeight: '800', 
                   textTransform: 'uppercase', 
-                  letterSpacing: '0.05em',
-                  padding: '4px 8px', 
+                  letterSpacing: '0.08em',
+                  padding: '6px 12px', 
                   borderRadius: 'var(--rounded-pill)',
-                  backgroundColor: b.status === 'completed' ? 'rgba(94, 188, 163, 0.12)' : 'rgba(92, 147, 214, 0.12)',
-                  color: b.status === 'completed' ? 'var(--colors-success)' : 'var(--colors-accent-blue)'
+                  backgroundColor: 'rgba(180, 120, 20, 0.08)',
+                  color: '#9c6518',
+                  border: '1px solid rgba(180, 120, 20, 0.2)'
                 } 
-              }, b.status),
-              el('button', {
-                class: 'btn btn-text',
-                style: { padding: '2px', fontSize: '12px', fontWeight: '700' },
-                onClick: () => {
-                  openEditBookModal(b, () => renderMediaSubView('books'));
-                }
-              }, "Edit")
-            ),
-            el('div', {},
-              el('h3', { style: { fontFamily: 'var(--font-display)', fontSize: '20px', fontWeight: '700', margin: '0', color: 'var(--colors-ink)' } }, b.title),
-              el('span', { style: { fontSize: '13px', color: 'var(--colors-muted)', display: 'block', marginTop: '2px' } }, `by ${b.author}`)
-            ),
-            el('div', {},
-              el('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', marginBottom: '6px', fontWeight: '600', color: 'var(--colors-ink)' } },
-                el('span', {}, "Reading Progression"),
-                el('strong', {}, `${b.pagesRead} / ${b.totalPages} pages (${percent}%)`)
-              ),
-              el('div', { class: 'macro-progress-bg' },
-                el('div', { class: 'macro-progress-fg', style: { width: `${percent}%`, backgroundColor: 'var(--colors-accent-blue)' } })
-              )
+              }, b.status)
             )
           )
         );
@@ -2737,28 +2823,40 @@ function renderMedia() {
     } else if (tab === 'movies') {
       const movieGrid = el('div', { class: 'vault-shelves-grid' });
       state.movies.forEach(m => {
-        let stars = '';
-        for (let i = 0; i < m.rating; i++) stars += '★';
-        for (let i = m.rating; i < 5; i++) stars += '☆';
-        
         movieGrid.appendChild(
-          el('div', { class: 'vault-item-card', style: { padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' } },
-            el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-              el('span', { style: { fontSize: '13px', color: 'var(--colors-accent-amber)' } }, stars),
-              el('button', {
-                class: 'btn btn-text',
-                style: { padding: '2px', fontSize: '12px', fontWeight: '700' },
-                onClick: () => {
-                  openEditMovieModal(m, () => renderMediaSubView('movies'));
-                }
-              }, "Edit")
+          el('div', { 
+            class: 'vault-item-card', 
+            style: { 
+              padding: '16px 20px', 
+              display: 'flex', 
+              flexDirection: 'row', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              gap: '20px', 
+              cursor: 'pointer' 
+            },
+            onClick: () => {
+              openEditMovieModal(m, () => renderMediaSubView('movies'));
+            }
+          },
+            el('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
+              el('h3', { style: { fontFamily: 'var(--font-display)', fontSize: '20px', fontWeight: '700', margin: '0', color: 'var(--colors-ink)', lineHeight: '1.25' } }, m.title),
+              el('span', { style: { fontSize: '13.5px', color: 'var(--colors-muted)' } }, `Released in ${m.year}`)
             ),
-            el('div', {},
-              el('h3', { style: { fontFamily: 'var(--font-display)', fontSize: '20px', fontWeight: '700', margin: '0', color: 'var(--colors-ink)' } }, m.title),
-              el('span', { style: { fontSize: '13px', color: 'var(--colors-muted)', display: 'block', marginTop: '2px' } }, `Released in ${m.year}`)
-            ),
-            el('p', { style: { fontSize: '13px', fontStyle: 'italic', color: 'var(--colors-body)', margin: '0', borderLeft: '2.5px solid var(--colors-surface-cream-strong)', paddingLeft: '8px' } }, 
-              m.review || 'No review logged.'
+            el('div', { style: { display: 'flex', alignItems: 'center', gap: '16px' } },
+              el('span', { 
+                style: { 
+                  fontSize: '10px', 
+                  fontWeight: '800', 
+                  textTransform: 'uppercase', 
+                  letterSpacing: '0.08em',
+                  padding: '6px 12px', 
+                  borderRadius: 'var(--rounded-pill)',
+                  backgroundColor: 'rgba(180, 120, 20, 0.08)',
+                  color: '#9c6518',
+                  border: '1px solid rgba(180, 120, 20, 0.2)'
+                } 
+              }, m.status || 'watched')
             )
           )
         );
