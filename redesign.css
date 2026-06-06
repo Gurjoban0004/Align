@@ -5,40 +5,40 @@
 
 :root {
   /* Premium Palette Tokens */
-  --colors-canvas: #f5f2eb;            /* Warm cream canvas floor */
-  --colors-surface-soft: #eae6db;      /* Divider background and subtle outlines */
+  --colors-canvas: #faf9f5;            /* Warm cream canvas floor */
+  --colors-surface-soft: #f5f0e8;      /* Divider background and subtle outlines */
   --colors-surface-card: #ffffff;      /* Pure white widget cards */
-  --colors-surface-cream-strong: #dfdaca; /* Deep warm highlighted tabs/borders */
-  --colors-surface-dark: #1a3020;      /* Deep forest green for main headers/sections */
-  --colors-surface-dark-elevated: #284430; /* Elevated forest green */
-  --colors-surface-dark-soft: #213c29;  /* Soft dark container */
+  --colors-surface-cream-strong: #efe9de; /* Deep warm highlighted tabs/borders */
+  --colors-surface-dark: #181715;      /* Warm near-black / dark charcoal */
+  --colors-surface-dark-elevated: #252320; /* Elevated dark */
+  --colors-surface-dark-soft: #1f1e1b;  /* Soft dark container */
 
-  --colors-primary: #1a3020;           /* Primary brand color (deep forest green) */
-  --colors-primary-active: #0f1e14;    /* Pressed primary color */
-  --colors-primary-disabled: #dfdaca;
+  --colors-primary: #cc785c;           /* Primary brand color (Anthropic warm coral) */
+  --colors-primary-active: #a9583e;    /* Pressed primary color */
+  --colors-primary-disabled: #e6dfd8;
 
   /* Accent Highlight Colors */
   --colors-accent-terracotta: #d96b43; /* Terracotta orange (calories / active) */
-  --colors-accent-teal: #5ebca3;       /* Mint teal (steps / water / success) */
-  --colors-accent-amber: #e2a960;      /* Soft gold/amber (sleep / stars / alert) */
-  --colors-accent-blue: #5c93d6;       /* Soft blue (reading logs / info) */
+  --colors-accent-teal: #e89e82;       /* Warm peach/coral pastel (steps / success) */
+  --colors-accent-amber: #e8a55a;      /* Soft gold/amber (sleep / stars / alert) */
+  --colors-accent-blue: #dfc098;       /* Soft warm sand/taupe pastel (reading / info) */
   
   /* Semantic */
-  --colors-success: #5ebca3;
-  --colors-warning: #e2a960;
-  --colors-error: #c65a5a;
-  --colors-hairline: #e6e3db;
-  --colors-hairline-soft: #eeebe5;
+  --colors-success: #e89e82;           /* Warm peach/coral success badge */
+  --colors-warning: #e8a55a;
+  --colors-error: #c64545;             /* Warm red error */
+  --colors-hairline: #e6dfd8;
+  --colors-hairline-soft: #ebe6df;
 
   /* Text colors */
-  --colors-ink: #112315;               /* Ink black-green for headers */
-  --colors-body-strong: #1a3020;
-  --colors-body: #3c493f;              /* Soft dark slate-green for running text */
-  --colors-muted: #78857c;             /* Muted gray-green */
-  --colors-muted-soft: #9eb0a4;
+  --colors-ink: #141413;               /* Ink black-green for headers */
+  --colors-body-strong: #252523;
+  --colors-body: #3d3d3a;              /* Soft dark slate-green for running text */
+  --colors-muted: #6c6a64;             /* Muted gray-green */
+  --colors-muted-soft: #8e8b82;
   --colors-on-primary: #ffffff;
-  --colors-on-dark: #f5f2eb;
-  --colors-on-dark-soft: #b0c2b6;
+  --colors-on-dark: #faf9f5;
+  --colors-on-dark-soft: #a09d96;
 
   /* Typography */
   --font-display: 'Cormorant Garamond', Garamond, 'Times New Roman', serif;
@@ -959,12 +959,11 @@ nav.bottom-nav {
   border-color: var(--colors-muted);
 }
 
-/* Matrix cell shades based on score completeness */
-.consistency-cell.level-0 { background-color: #f5f2eb; } /* Empty */
-.consistency-cell.level-1 { background-color: #d1e2d6; } /* 1-40% */
-.consistency-cell.level-2 { background-color: #a4c6ae; } /* 41-79% */
-.consistency-cell.level-3 { background-color: #558a64; } /* 80-99% */
-.consistency-cell.level-4 { background-color: #1a3020; } /* 100% */
+.consistency-cell.level-0 { background-color: var(--colors-canvas); } /* Empty */
+.consistency-cell.level-1 { background-color: #fbece5; } /* 1-40% */
+.consistency-cell.level-2 { background-color: #f7d1c2; } /* 41-79% */
+.consistency-cell.level-3 { background-color: #ec9f82; } /* 80-99% */
+.consistency-cell.level-4 { background-color: var(--colors-primary); } /* 100% */
 
 .consistency-legend {
   display: flex;

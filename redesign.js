@@ -552,10 +552,10 @@ function openSleepLogger(day, onSave) {
     grad.id = 'sleepGrad';
     const stop1 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
     stop1.setAttribute('offset', '0%');
-    stop1.setAttribute('stop-color', '#1a3020');
+    stop1.setAttribute('stop-color', '#cc785c');
     const stop2 = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
     stop2.setAttribute('offset', '100%');
-    stop2.setAttribute('stop-color', '#e2a960');
+    stop2.setAttribute('stop-color', '#e8a55a');
     grad.appendChild(stop1);
     grad.appendChild(stop2);
     defs.appendChild(grad);
@@ -572,7 +572,7 @@ function openSleepLogger(day, onSave) {
       tick.setAttribute('y1', innerP.y);
       tick.setAttribute('x2', outerP.x);
       tick.setAttribute('y2', outerP.y);
-      tick.setAttribute('stroke', '#b0c2b6');
+      tick.setAttribute('stroke', '#e6dfd8');
       tick.setAttribute('stroke-width', '1.5');
       svg.appendChild(tick);
 
@@ -583,7 +583,7 @@ function openSleepLogger(day, onSave) {
       hourLabel.setAttribute('y', labelP.y);
       hourLabel.setAttribute('text-anchor', 'middle');
       hourLabel.setAttribute('dominant-baseline', 'central');
-      hourLabel.setAttribute('fill', '#78857c');
+      hourLabel.setAttribute('fill', '#6c6a64');
       hourLabel.setAttribute('font-size', '10');
       hourLabel.setAttribute('font-family', 'Outfit, sans-serif');
       hourLabel.setAttribute('font-weight', '600');
@@ -594,7 +594,7 @@ function openSleepLogger(day, onSave) {
     // Sleep handle
     const sleepHandle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     sleepHandle.setAttribute('r', handleR);
-    sleepHandle.setAttribute('fill', '#1a3020');
+    sleepHandle.setAttribute('fill', '#cc785c');
     sleepHandle.setAttribute('stroke', '#ffffff');
     sleepHandle.setAttribute('stroke-width', '3');
     sleepHandle.setAttribute('cursor', 'grab');
@@ -603,7 +603,7 @@ function openSleepLogger(day, onSave) {
     // Wake handle
     const wakeHandle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     wakeHandle.setAttribute('r', handleR);
-    wakeHandle.setAttribute('fill', '#e2a960');
+    wakeHandle.setAttribute('fill', '#e8a55a');
     wakeHandle.setAttribute('stroke', '#ffffff');
     wakeHandle.setAttribute('stroke-width', '3');
     wakeHandle.setAttribute('cursor', 'grab');
