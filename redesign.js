@@ -2760,12 +2760,11 @@ function renderMedia() {
               openEditBookModal(b, () => renderMediaSubView('books'));
             }
           },
-            el('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
+            el('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px', flex: '1', paddingRight: '12px' } },
               el('h3', { style: { fontFamily: 'var(--font-display)', fontSize: '20px', fontWeight: '700', margin: '0', color: 'var(--colors-ink)', lineHeight: '1.25' } }, b.title),
               el('span', { style: { fontSize: '13.5px', color: 'var(--colors-muted)' } }, `by ${b.author}`)
             ),
-            el('div', { style: { display: 'flex', alignItems: 'center', gap: '16px' } },
-              el('span', { style: { fontSize: '13px', fontWeight: '600', color: 'var(--colors-ink)' } }, `${b.pagesRead} / ${b.totalPages} pages done`),
+            el('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px', flexShrink: '0' } },
               el('span', { 
                 style: { 
                   fontSize: '10px', 
@@ -2776,9 +2775,13 @@ function renderMedia() {
                   borderRadius: 'var(--rounded-pill)',
                   backgroundColor: 'rgba(180, 120, 20, 0.08)',
                   color: '#9c6518',
-                  border: '1px solid rgba(180, 120, 20, 0.2)'
+                  border: '1px solid rgba(180, 120, 20, 0.2)',
+                  display: 'inline-block'
                 } 
-              }, b.status)
+              }, b.status),
+              b.status !== 'completed' 
+                ? el('span', { style: { fontSize: '12.5px', color: 'var(--colors-muted)', fontWeight: '600' } }, `${b.pagesRead} / ${b.totalPages} pages done`)
+                : null
             )
           )
         );
@@ -2839,11 +2842,11 @@ function renderMedia() {
               openEditMovieModal(m, () => renderMediaSubView('movies'));
             }
           },
-            el('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
+            el('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px', flex: '1', paddingRight: '12px' } },
               el('h3', { style: { fontFamily: 'var(--font-display)', fontSize: '20px', fontWeight: '700', margin: '0', color: 'var(--colors-ink)', lineHeight: '1.25' } }, m.title),
               el('span', { style: { fontSize: '13.5px', color: 'var(--colors-muted)' } }, `Released in ${m.year}`)
             ),
-            el('div', { style: { display: 'flex', alignItems: 'center', gap: '16px' } },
+            el('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: '0' } },
               el('span', { 
                 style: { 
                   fontSize: '10px', 
@@ -2854,7 +2857,8 @@ function renderMedia() {
                   borderRadius: 'var(--rounded-pill)',
                   backgroundColor: 'rgba(180, 120, 20, 0.08)',
                   color: '#9c6518',
-                  border: '1px solid rgba(180, 120, 20, 0.2)'
+                  border: '1px solid rgba(180, 120, 20, 0.2)',
+                  display: 'inline-block'
                 } 
               }, m.status || 'watched')
             )
