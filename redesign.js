@@ -1209,8 +1209,18 @@ function setupFirestoreLogSync(user, date) {
   });
 }
 
+function generateSyncToken() {
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
+
 async function saveUserPreferences() {
   if (!firebase.db || !state.user) return;
+  
+  if (!state.profile) state.profile = {};
+  if (!state.profile.syncToken) {
+    state.profile.syncToken = generateSyncToken();
+  }
+  
   const userDocRef = firebase.doc(firebase.db, "users", state.user.uid);
   try {
     await firebase.setDoc(userDocRef, {
@@ -1218,7 +1228,7 @@ async function saveUserPreferences() {
       recipes: state.recipes,
       books: state.books,
       movies: state.movies,
-      profile: state.profile || null
+      profile: state.profile
     }, { merge: true });
   } catch (e) {
     console.error("Error saving user preferences to Firestore:", e);
@@ -4719,16 +4729,7 @@ function renderSettings() {
           )
         );
       } else {
-        const patchUrl = `https://firestore.googleapis.com/v1/projects/${fbConfig.projectId}/databases/(default)/documents/users/${state.user.uid}/dailyLogs/YYYY-MM-DD?updateMask.fieldPaths=steps&updateMask.fieldPaths=sleep&updateMask.fieldPaths=activeBurn`;
-        const authUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${fbConfig.apiKey}`;
-        const authPayloadPlaceholder = JSON.stringify({ email: "your-email@domain.com", password: "your-password", returnSecureToken: true }, null, 2);
-        const patchPayloadPlaceholder = JSON.stringify({
-          fields: {
-            steps: { integerValue: 10500 },
-            sleep: { doubleValue: 7.5 },
-            activeBurn: { integerValue: 420 }
-          }
-        }, null, 2);
+        const syncToken = state.profile?.syncToken || "Generating token... Please wait or refresh.";
 
         healthSyncCard = el('div', { class: 'form-card health-sync-card', style: { marginTop: '24px' } },
           el('h3', {}, " Apple Health Integration"),
@@ -4736,98 +4737,43 @@ function renderSettings() {
           
           el('div', { class: 'settings-split-wrapper', style: { display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '12px' } },
             el('div', {},
-              el('h4', { style: { fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: '700', color: 'var(--colors-ink)', marginBottom: '8px' } }, "Step 1: Enable Email & Password in Firebase"),
-              el('p', { style: { fontSize: '13px', color: 'var(--colors-muted)', lineHeight: '1.4' } }, 
-                "Go to your Firebase Console -> Authentication -> Sign-in Method, and enable the Email/Password provider. Create a sync user account (or use your own email/password if linked)."
+              el('h4', { style: { fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: '700', color: 'var(--colors-ink)', marginBottom: '8px' } }, "Step 1: Your Secure Sync Token"),
+              el('p', { style: { fontSize: '13px', color: 'var(--colors-muted)', lineHeight: '1.4', marginBottom: '8px' } }, 
+                "This token securely connects your iPhone to your tracker without exposing your database credentials. Keep it secret."
+              ),
+              el('div', { class: 'form-group' },
+                el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                  el('span', { class: 'form-label', style: { fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' } }, "SYNC TOKEN"),
+                  el('button', { 
+                    class: 'btn btn-text copy-btn', 
+                    style: { fontSize: '11px', padding: '2px 8px' },
+                    onClick: () => {
+                      navigator.clipboard.writeText(syncToken);
+                      alert("Sync Token copied!");
+                    }
+                  }, "Copy Token")
+                ),
+                el('div', { class: 'health-sync-code-box', style: { fontSize: '15px', letterSpacing: '0.05em', textAlign: 'center', padding: '16px' } }, syncToken)
               )
             ),
 
             el('div', {},
-              el('h4', { style: { fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: '700', color: 'var(--colors-ink)', marginBottom: '8px' } }, "Step 2: Get iOS Shortcut Template"),
+              el('h4', { style: { fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: '700', color: 'var(--colors-ink)', marginBottom: '8px' } }, "Step 2: Get the Universal Apple Shortcut"),
               el('p', { style: { fontSize: '13px', color: 'var(--colors-muted)', lineHeight: '1.4', marginBottom: '8px' } }, 
-                "Open this link on your iPhone to download the customized Apple Shortcut template:"
+                "Download the pre-built Apple Shortcut. When prompted during installation, paste your Sync Token from above."
               ),
               el('a', {
-                href: 'https://www.icloud.com/shortcuts/d8544cb4422e48de9a9f24c3df40d393',
+                href: 'https://www.icloud.com/shortcuts/64c67bd770ea4502b85e05a2f5f4007b',
                 target: '_blank',
-                class: 'btn btn-secondary',
-                style: { width: 'fit-content', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px' }
-              }, icon(ICONS.sparkles), "Get Life Sync Shortcut")
+                class: 'btn btn-primary',
+                style: { width: '100%', textDecoration: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }
+              }, icon(ICONS.sparkles, "btn-icon"), "Download Apple Shortcut")
             ),
 
             el('div', {},
-              el('h4', { style: { fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: '700', color: 'var(--colors-ink)', marginBottom: '8px' } }, "Step 3: Setup iOS Automation Triggers"),
+              el('h4', { style: { fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: '700', color: 'var(--colors-ink)', marginBottom: '8px' } }, "Step 3: Set up iOS Automation (Optional)"),
               el('p', { style: { fontSize: '13px', color: 'var(--colors-muted)', lineHeight: '1.4' } }, 
-                "Inside the iOS Shortcuts app, navigate to Automation -> Create Personal Automation. Trigger when you close an app (e.g. Messages, Mail, Safari) to sync 20-50 times a day in the background for free. Select the imported 'Life Sync' shortcut as the action."
-              )
-            ),
-
-            el('div', { style: { borderTop: '1px solid var(--colors-hairline)', paddingTop: '20px' } },
-              el('h4', { style: { fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: '700', color: 'var(--colors-ink)', marginBottom: '12px' } }, "Step 4: Webhook Configuration Keys"),
-              
-              el('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
-                el('div', { class: 'form-group' },
-                  el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-                    el('span', { class: 'form-label' }, "1. Authentication REST Endpoint"),
-                    el('button', { 
-                      class: 'btn btn-text copy-btn', 
-                      style: { fontSize: '11px', padding: '2px 8px' },
-                      onClick: () => {
-                        navigator.clipboard.writeText(authUrl);
-                        alert("Authentication URL copied!");
-                      }
-                    }, "Copy")
-                  ),
-                  el('div', { class: 'health-sync-code-box' }, authUrl)
-                ),
-
-                el('div', { class: 'form-group' },
-                  el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-                    el('span', { class: 'form-label' }, "2. Auth Payload Placeholder"),
-                    el('button', { 
-                      class: 'btn btn-text copy-btn', 
-                      style: { fontSize: '11px', padding: '2px 8px' },
-                      onClick: () => {
-                        navigator.clipboard.writeText(authPayloadPlaceholder);
-                        alert("Auth Payload copied!");
-                      }
-                    }, "Copy")
-                  ),
-                  el('pre', { class: 'health-sync-code-box', style: { whiteSpace: 'pre-wrap' } }, authPayloadPlaceholder)
-                ),
-
-                el('div', { class: 'form-group' },
-                  el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-                    el('span', { class: 'form-label' }, "3. Firestore PATCH Endpoint"),
-                    el('button', { 
-                      class: 'btn btn-text copy-btn', 
-                      style: { fontSize: '11px', padding: '2px 8px' },
-                      onClick: () => {
-                        navigator.clipboard.writeText(patchUrl);
-                        alert("PATCH Endpoint copied!");
-                      }
-                    }, "Copy")
-                  ),
-                  el('div', { class: 'health-sync-code-box' }, patchUrl),
-                  el('span', { style: { fontSize: '11px', color: 'var(--colors-muted)', marginTop: '4px' } }, 
-                    "Note: Replace YYYY-MM-DD in the URL dynamically with the current date using the Shortcut Date Formatting block (Format: yyyy-MM-dd)."
-                  )
-                ),
-
-                el('div', { class: 'form-group' },
-                  el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-                    el('span', { class: 'form-label' }, "4. Firestore JSON Payload Template"),
-                    el('button', { 
-                      class: 'btn btn-text copy-btn', 
-                      style: { fontSize: '11px', padding: '2px 8px' },
-                      onClick: () => {
-                        navigator.clipboard.writeText(patchPayloadPlaceholder);
-                        alert("Payload Template copied!");
-                      }
-                    }, "Copy")
-                  ),
-                  el('pre', { class: 'health-sync-code-box', style: { whiteSpace: 'pre-wrap' } }, patchPayloadPlaceholder)
-                )
+                "Inside the iOS Shortcuts app, navigate to Automation -> Create Personal Automation. Trigger it when you close an app (like Messages or Safari) to sync automatically in the background all day."
               )
             )
           )
