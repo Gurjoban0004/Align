@@ -4880,7 +4880,11 @@ function initApp() {
     firebase.onAuthStateChanged(firebase.auth, (user) => {
       if (user) {
         state.user = user;
-        renderApp();
+        if (window.location.hash === '#auth' || !window.location.hash) {
+          window.location.hash = '#dashboard';
+        } else {
+          renderApp();
+        }
         setupFirestoreSync(user);
       } else {
         state.user = null;
