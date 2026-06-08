@@ -1168,7 +1168,16 @@ function setupFirestoreSync(user) {
       if (data.recipes) state.recipes = data.recipes;
       if (data.books) state.books = data.books;
       if (data.movies) state.movies = data.movies;
-      if (data.profile) state.profile = data.profile;
+      if (data.profile) {
+        state.profile = data.profile;
+      }
+      
+      // Auto-generate sync token for existing users who don't have one
+      if (!state.profile) state.profile = {};
+      if (!state.profile.syncToken) {
+        saveUserPreferences(); // This will auto-generate the token and save it
+      }
+      
       saveLocalState();
       renderApp();
     } else {
