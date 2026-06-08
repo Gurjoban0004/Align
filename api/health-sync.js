@@ -82,7 +82,10 @@ export default async function handler(req, res) {
     if (parsedBurn !== null) updateData.activeBurn = Math.round(parsedBurn);
 
     if (Object.keys(updateData).length === 0) {
-      return res.status(400).json({ error: 'Bad Request: No valid health data (steps, sleep, activeBurn) provided.' });
+      return res.status(400).json({ 
+        error: 'Bad Request: No valid health data (steps, sleep, activeBurn) provided.',
+        receivedBody: req.body
+      });
     }
 
     // Merge true ensures we don't overwrite other data like recipes/notes
