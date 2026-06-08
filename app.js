@@ -355,6 +355,7 @@ function updateNumberFromInput(e, setter) {
 // --- Application State ---
 let state = {
   user: null,
+  profile: null, // User Onboarding Profile
   activeView: 'dashboard',
   dashboardSubTab: 'today',
   dateStr: new Date().toISOString().split('T')[0], // YYYY-MM-DD
@@ -545,7 +546,9 @@ function loadLocalState() {
   const localLogs = localStorage.getItem('life_tracker_logs');
   const localSplits = localStorage.getItem('life_tracker_splits');
   const localRecipes = localStorage.getItem('life_tracker_recipes');
+  const localProfile = localStorage.getItem('life_tracker_profile');
   
+  if (localProfile) state.profile = JSON.parse(localProfile);
   if (localLogs) state.logs = JSON.parse(localLogs);
   if (localSplits) state.workoutSplit = JSON.parse(localSplits);
   if (localRecipes) state.recipes = JSON.parse(localRecipes);
@@ -555,6 +558,7 @@ function saveLocalState() {
   localStorage.setItem('life_tracker_logs', JSON.stringify(state.logs));
   localStorage.setItem('life_tracker_splits', JSON.stringify(state.workoutSplit));
   localStorage.setItem('life_tracker_recipes', JSON.stringify(state.recipes));
+  localStorage.setItem('life_tracker_profile', JSON.stringify(state.profile));
 }
 
 // --- IndexedDB Offline Sync Queue ---
@@ -696,6 +700,7 @@ function setupFirestoreSync(user) {
       const data = docSnapshot.data();
       if (data.workoutSplit) state.workoutSplit = data.workoutSplit;
       if (data.recipes) state.recipes = data.recipes;
+      if (data.profile) state.profile = data.profile;
       saveLocalState();
       renderApp();
     } else {
@@ -744,7 +749,8 @@ async function saveUserPreferences() {
   try {
     await firebase.setDoc(userDocRef, {
       workoutSplit: state.workoutSplit,
-      recipes: state.recipes
+      recipes: state.recipes,
+      profile: state.profile || null
     }, { merge: true });
   } catch (e) {
     console.error("Error saving user preferences to Firestore:", e);

@@ -8,6 +8,7 @@ Thumbs.db
 .env.development.local
 .env.test.local
 .env.production.local
+firebase-api-keys.txt
 
 # Local server files
 server.log

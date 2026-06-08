@@ -34,6 +34,25 @@ function el(tag, attrs = {}, ...children) {
   return element;
 }
 
+function elNS(tag, attrs = {}, ...children) {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [key, val] of Object.entries(attrs)) {
+    if (key === 'style' && typeof val === 'object') {
+      Object.assign(element.style, val);
+    } else {
+      element.setAttribute(key, val);
+    }
+  }
+  for (const child of children) {
+    if (typeof child === 'string' || typeof child === 'number') {
+      element.appendChild(document.createTextNode(child));
+    } else if (child instanceof HTMLElement || child instanceof SVGElement) {
+      element.appendChild(child);
+    }
+  }
+  return element;
+}
+
 // SVG Icon Helper
 function icon(d, classList = "") {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -100,6 +119,7 @@ const VIEW_META = {
 // --- Application State (with LocalStorage namespace for Redesign prototype) ---
 let state = {
   user: null,
+  profile: null, // User Onboarding Profile
   activeView: 'dashboard',
   dashboardSubTab: 'today',
   dateStr: new Date().toISOString().split('T')[0], // YYYY-MM-DD
@@ -125,8 +145,8 @@ let state = {
   
   // Custom Recipes
   recipes: [
-    { title: "High Protein Oatmeal", calories: 450, protein: 30, desc: "Oats, whey, almond milk, banana" },
-    { title: "Chicken Rice Bowl", calories: 650, protein: 45, desc: "Chicken breast, jasmine rice, broccoli, olive oil" }
+    { title: "High Protein Oatmeal", calories: 450, protein: 30, carbs: 45, fat: 8, desc: "Oats, whey, almond milk, banana" },
+    { title: "Chicken Rice Bowl", calories: 650, protein: 45, carbs: 60, fat: 12, desc: "Chicken breast, jasmine rice, broccoli, olive oil" }
   ],
   
   // Daily Logs indexed by date
@@ -144,7 +164,7 @@ let state = {
 };
 
 let lastRenderedView = null;
-let activeSettingsTab = 'templates';
+let activeSettingsTab = 'profile';
 
 // Get default empty daily logs structure
 function getEmptyDayLog() {
@@ -159,16 +179,32 @@ function getEmptyDayLog() {
     workouts: [], 
     habitsCompleted: [], 
     aiReview: null, 
-    pagesRead: 0 
+    pagesRead: 0,
+    activeBurn: null,
+    chatHistory: []
   };
 }
 
+function normalizeDayLog(day) {
+  if (!day) return getEmptyDayLog();
+  const defaults = getEmptyDayLog();
+  for (const key in defaults) {
+    if (day[key] === undefined || day[key] === null) {
+      day[key] = defaults[key];
+    }
+  }
+  return day;
+}
+
 function getActiveBurn(dayLog) {
+  if (dayLog && typeof dayLog.activeBurn === 'number') {
+    return Math.round(dayLog.activeBurn);
+  }
   let burn = 0;
-  if (dayLog.steps > 0) {
+  if (dayLog && dayLog.steps > 0) {
     burn += dayLog.steps * 0.04;
   }
-  if (dayLog.workouts && dayLog.workouts.length > 0) {
+  if (dayLog && dayLog.workouts && dayLog.workouts.length > 0) {
     let totalSets = dayLog.workouts.reduce((acc, ex) => acc + (parseInt(ex.sets) || 0), 0);
     burn += 150 + (totalSets * 20);
   }
@@ -179,9 +215,13 @@ function syncDailyProgress(day) {
   if (!day.habitsCompleted) {
     day.habitsCompleted = [];
   }
-  // Sync 10k Steps habit (h2)
+  
+  const stepGoal = state.profile?.targetSteps || 10000;
+  const waterGoal = state.profile?.targetWater || 8;
+
+  // Sync Steps habit (h2)
   const stepsIndex = day.habitsCompleted.indexOf('h2');
-  if (day.steps >= 10000) {
+  if (day.steps >= stepGoal) {
     if (stepsIndex === -1) day.habitsCompleted.push('h2');
   } else {
     if (stepsIndex !== -1) day.habitsCompleted.splice(stepsIndex, 1);
@@ -189,7 +229,7 @@ function syncDailyProgress(day) {
 
   // Sync Hydration habit (h3)
   const waterIndex = day.habitsCompleted.indexOf('h3');
-  if (day.water >= 8) {
+  if (day.water >= waterGoal) {
     if (waterIndex === -1) day.habitsCompleted.push('h3');
   } else {
     if (waterIndex !== -1) day.habitsCompleted.splice(waterIndex, 1);
@@ -200,7 +240,8 @@ function getTodayLog() {
   if (!state.logs[state.dateStr]) {
     state.logs[state.dateStr] = getEmptyDayLog();
   }
-  const day = state.logs[state.dateStr];
+  const day = normalizeDayLog(state.logs[state.dateStr]);
+  state.logs[state.dateStr] = day; // save normalized back
   syncDailyProgress(day);
   return day;
 }
@@ -212,8 +253,15 @@ function loadLocalState() {
   const localRecipes = localStorage.getItem('life_tracker_redesign_recipes');
   const localBooks = localStorage.getItem('life_tracker_redesign_books');
   const localMovies = localStorage.getItem('life_tracker_redesign_movies');
+  const localProfile = localStorage.getItem('life_tracker_redesign_profile');
   
-  if (localLogs) state.logs = JSON.parse(localLogs);
+  if (localProfile) state.profile = JSON.parse(localProfile);
+  if (localLogs) {
+    state.logs = JSON.parse(localLogs);
+    for (const d in state.logs) {
+      state.logs[d] = normalizeDayLog(state.logs[d]);
+    }
+  }
   if (localSplits) state.workoutSplit = JSON.parse(localSplits);
   if (localRecipes) state.recipes = JSON.parse(localRecipes);
   if (localBooks) state.books = JSON.parse(localBooks);
@@ -249,6 +297,7 @@ function saveLocalState() {
   localStorage.setItem('life_tracker_redesign_recipes', JSON.stringify(state.recipes));
   localStorage.setItem('life_tracker_redesign_books', JSON.stringify(state.books));
   localStorage.setItem('life_tracker_redesign_movies', JSON.stringify(state.movies));
+  localStorage.setItem('life_tracker_redesign_profile', JSON.stringify(state.profile));
 }
 
 // Format Long Date strings nicely
@@ -272,7 +321,20 @@ function formatLongDate(dateStr) {
 }
 
 function getHabitDefinitions() {
-  return JSON.parse(localStorage.getItem('life_tracker_redesign_habits_list')) || DEFAULT_HABITS;
+  const habits = JSON.parse(localStorage.getItem('life_tracker_redesign_habits_list')) || DEFAULT_HABITS;
+  const stepGoal = state.profile?.targetSteps || 10000;
+  const waterGoal = state.profile?.targetWater || 8;
+  
+  return habits.map(h => {
+    if (h.id === 'h2') {
+      const stepText = stepGoal >= 1000 ? `${(stepGoal/1000).toFixed(1).replace('.0', '')}k` : stepGoal;
+      return { ...h, title: `${stepText} Steps Walked` };
+    }
+    if (h.id === 'h3') {
+      return { ...h, title: `Hydrated (${waterGoal}+ Cups)` };
+    }
+    return h;
+  });
 }
 
 function saveHabitDefinitions(list) {
@@ -282,6 +344,9 @@ function saveHabitDefinitions(list) {
 // Generate Proactive Insights list
 function generateInsights(day) {
   const insights = [];
+  const stepGoal = state.profile?.targetSteps || 10000;
+  const waterGoal = state.profile?.targetWater || 8;
+  const stepGoalText = stepGoal >= 1000 ? `${(stepGoal/1000).toFixed(0)}k` : stepGoal;
   
   if (!day.sleep || day.sleep === 0) {
     insights.push({
@@ -295,11 +360,11 @@ function generateInsights(day) {
     });
   }
 
-  if (day.water < 8) {
+  if (day.water < waterGoal) {
     insights.push({
       id: 'hydration-refocus',
       category: 'water',
-      text: `Water balance: ${day.water}/8 cups. Drink a glass to boost energy.`,
+      text: `Water balance: ${day.water}/${waterGoal} cups. Drink a glass to boost energy.`,
       actionText: "+ 1 Cup",
       action: () => {
         day.water = (day.water || 0) + 1;
@@ -310,11 +375,11 @@ function generateInsights(day) {
     });
   }
 
-  if (day.steps < 10000) {
+  if (day.steps < stepGoal) {
     insights.push({
       id: 'steps-check',
       category: 'steps',
-      text: `Step progression: ${day.steps.toLocaleString()}/10k steps logged today.`,
+      text: `Step progression: ${day.steps.toLocaleString()}/${stepGoalText} steps logged today.`,
       actionText: "+ 2k Steps",
       action: () => {
         day.steps = (day.steps || 0) + 2000;
@@ -1072,15 +1137,18 @@ function getWeeklyTrends(baseDateStr) {
 
 // Compute daily readiness score (0-100)
 function computeDailyScore(day, habitPercent) {
-  const stepGoal = 10000;
+  const stepGoal = state.profile?.targetSteps || 10000;
   const stepPercent = Math.min(100, Math.round(((day.steps || 0) / stepGoal) * 100));
   
   const netCals = Math.max(0, (day.calories || 0) - getActiveBurn(day));
-  const calGoal = 2000;
+  const calGoal = state.profile?.targetCalories || 2000;
   const calPercent = Math.min(100, Math.round((netCals / calGoal) * 100));
   
-  const sleepScore = Math.min(100, Math.round(((day.sleep || 0) / 8) * 100));
-  const waterScore = Math.min(100, Math.round(((day.water || 0) / 8) * 100));
+  const sleepGoal = state.profile?.targetSleep || 8;
+  const sleepScore = Math.min(100, Math.round(((day.sleep || 0) / sleepGoal) * 100));
+  
+  const waterGoal = state.profile?.targetWater || 8;
+  const waterScore = Math.min(100, Math.round(((day.water || 0) / waterGoal) * 100));
   
   return Math.round((stepPercent + calPercent + sleepScore + waterScore + habitPercent) / 5);
 }
@@ -1100,6 +1168,7 @@ function setupFirestoreSync(user) {
       if (data.recipes) state.recipes = data.recipes;
       if (data.books) state.books = data.books;
       if (data.movies) state.movies = data.movies;
+      if (data.profile) state.profile = data.profile;
       saveLocalState();
       renderApp();
     } else {
@@ -1124,7 +1193,7 @@ function setupFirestoreLogSync(user, date) {
   const logDocRef = firebase.doc(firebase.db, "users", user.uid, "dailyLogs", date);
   firestoreLogUnsubscribe = firebase.onSnapshot(logDocRef, (docSnapshot) => {
     if (docSnapshot.exists()) {
-      state.logs[date] = docSnapshot.data();
+      state.logs[date] = normalizeDayLog(docSnapshot.data());
       saveLocalState();
       renderApp();
     } else {
@@ -1146,7 +1215,8 @@ async function saveUserPreferences() {
       workoutSplit: state.workoutSplit,
       recipes: state.recipes,
       books: state.books,
-      movies: state.movies
+      movies: state.movies,
+      profile: state.profile || null
     }, { merge: true });
   } catch (e) {
     console.error("Error saving user preferences to Firestore:", e);
@@ -1304,6 +1374,435 @@ function renderMobileHeader() {
   );
 }
 
+// ============================================================
+// USER ONBOARDING WIZARD SYSTEM
+// ============================================================
+let onboardingStep = 1;
+let onboardingData = {
+  goal: 'maintain',
+  gender: 'male',
+  age: 30,
+  height: 175,
+  weight: 75,
+  goalWeight: 75,
+  activityLevel: 'moderate',
+  targetCalories: 2000,
+  targetProtein: 140,
+  targetWater: 8,
+  targetSteps: 10000,
+  targetSleep: 8
+};
+
+function calculateOnboardingTargets() {
+  const weight = parseFloat(onboardingData.weight) || 70;
+  const height = parseFloat(onboardingData.height) || 170;
+  const age = parseInt(onboardingData.age) || 30;
+  const gender = onboardingData.gender || 'male';
+  const goal = onboardingData.goal || 'maintain';
+  const activity = onboardingData.activityLevel || 'moderate';
+
+  const targets = recalcProfileTargets(goal, weight, height, age, gender, activity);
+  
+  onboardingData.targetCalories = targets.calories;
+  onboardingData.targetProtein = targets.protein;
+  onboardingData.targetWater = 8;
+  onboardingData.targetSteps = 10000;
+  onboardingData.targetSleep = 8;
+}
+
+function recalcProfileTargets(goal, weight, height, age, gender, activity) {
+  // Mifflin-St Jeor Formula
+  let bmr = 0;
+  if (gender === 'male') {
+    bmr = 10 * weight + 6.25 * height - 5 * age + 5;
+  } else if (gender === 'female') {
+    bmr = 10 * weight + 6.25 * height - 5 * age - 161;
+  } else {
+    bmr = 10 * weight + 6.25 * height - 5 * age - 78;
+  }
+
+  // Activity Multipliers
+  let multiplier = 1.2;
+  if (activity === 'light') multiplier = 1.375;
+  else if (activity === 'moderate') multiplier = 1.55;
+  else if (activity === 'active') multiplier = 1.725;
+
+  const tdee = Math.round(bmr * multiplier);
+
+  // Calorie adjustments
+  let calories = tdee;
+  if (goal === 'lose') {
+    calories = Math.max(1200, tdee - 500);
+  } else if (goal === 'build') {
+    calories = tdee + 300;
+  }
+
+  // Protein adjustments
+  let protein = 120;
+  if (goal === 'lose' || goal === 'build') {
+    protein = Math.round(1.8 * weight);
+  } else {
+    protein = Math.round(1.4 * weight);
+  }
+
+  return { calories, protein };
+}
+
+function renderOnboarding() {
+  const container = el('div', { class: 'section' });
+  const wrapper = el('div', { class: 'container', style: { maxWidth: '640px' } });
+  
+  const stepTitles = ["Objective", "Metrics", "Lifestyle", "Targets", "Review"];
+  const progressPercent = ((onboardingStep - 1) / (stepTitles.length - 1)) * 100;
+  
+  const progressBar = el('div', { class: 'onboarding-progress-bar', style: { width: `${progressPercent}%` } });
+  const progressTrack = el('div', { class: 'onboarding-progress-track' }, progressBar);
+  
+  const stepIndicators = stepTitles.map((title, i) => {
+    const isPastOrCurrent = (i + 1) <= onboardingStep;
+    return el('span', { 
+      class: `onboarding-step-indicator ${isPastOrCurrent ? 'active' : ''}`,
+      style: { fontWeight: isPastOrCurrent ? '700' : '500' }
+    }, title);
+  });
+  
+  const progressHeader = el('div', { class: 'onboarding-progress' },
+    progressTrack,
+    el('div', { class: 'onboarding-progress-steps' }, ...stepIndicators)
+  );
+
+  const card = el('div', { class: 'onboarding-card' });
+  card.appendChild(progressHeader);
+
+  if (onboardingStep === 1) {
+    card.appendChild(el('h2', { style: { fontFamily: 'var(--font-display)', marginBottom: '8px' } }, "Welcome. What is your primary focus?"));
+    card.appendChild(el('p', { class: 'page-subtitle' }, "Let's tailor your Life Tracker to align with your health and fitness objectives."));
+    
+    const goals = [
+      { id: 'lose', title: 'Lose Body Fat', desc: 'Optimize nutrition with a caloric deficit and track training consistency.' },
+      { id: 'maintain', title: 'Maintain Weight & Fitness', desc: 'Find your TDEE equilibrium and build solid lifestyle consistency.' },
+      { id: 'build', title: 'Build Strength & Muscle', desc: 'Fuel progressive overload workouts with a caloric surplus and protein targets.' },
+      { id: 'wellness', title: 'General Wellness & Habits', desc: 'Focus on sleep, hydration, and daily habit consistency without active weight tracking.' }
+    ];
+    
+    const grid = el('div', { class: 'onboarding-choice-grid' },
+      ...goals.map(g => el('div', {
+        class: `onboarding-choice-card ${onboardingData.goal === g.id ? 'active' : ''}`,
+        onClick: () => {
+          onboardingData.goal = g.id;
+          renderApp();
+        }
+      },
+        el('strong', {}, g.title),
+        el('span', {}, g.desc)
+      ))
+    );
+    card.appendChild(grid);
+    
+    const nextBtn = el('button', {
+      class: 'btn btn-primary',
+      style: { marginLeft: 'auto' },
+      onClick: () => {
+        onboardingStep = 2;
+        renderApp();
+      }
+    }, "Continue", icon(ICONS.chevronRight));
+    
+    card.appendChild(el('div', { class: 'onboarding-nav' }, nextBtn));
+
+  } else if (onboardingStep === 2) {
+    card.appendChild(el('h2', { style: { fontFamily: 'var(--font-display)', marginBottom: '8px' } }, "Tell us about yourself"));
+    card.appendChild(el('p', { class: 'page-subtitle' }, "Your body metrics are used to calculate your basic metabolic rate (BMR) and starting targets."));
+    
+    const genderField = el('div', { class: 'onboarding-field' },
+      el('label', {}, "Biological Gender"),
+      el('select', {
+        class: 'onboarding-select',
+        onChange: (e) => { onboardingData.gender = e.target.value; }
+      },
+        el('option', { value: 'male', selected: onboardingData.gender === 'male' }, "Male"),
+        el('option', { value: 'female', selected: onboardingData.gender === 'female' }, "Female"),
+        el('option', { value: 'other', selected: onboardingData.gender === 'other' }, "Prefer not to say / Neutral")
+      )
+    );
+
+    const ageField = el('div', { class: 'onboarding-field' },
+      el('label', {}, "Age (Years)"),
+      el('input', {
+        type: 'number',
+        class: 'onboarding-input',
+        value: onboardingData.age,
+        min: '10',
+        max: '100',
+        onInput: (e) => { onboardingData.age = parseInt(e.target.value) || 30; }
+      })
+    );
+
+    const heightField = el('div', { class: 'onboarding-field' },
+      el('label', {}, "Height (cm)"),
+      el('input', {
+        type: 'number',
+        class: 'onboarding-input',
+        value: onboardingData.height,
+        min: '100',
+        max: '250',
+        onInput: (e) => { onboardingData.height = parseFloat(e.target.value) || 170; }
+      })
+    );
+
+    const weightField = el('div', { class: 'onboarding-field' },
+      el('label', {}, "Current Weight (kg)"),
+      el('input', {
+        type: 'number',
+        class: 'onboarding-input',
+        value: onboardingData.weight,
+        min: '30',
+        max: '300',
+        step: '0.1',
+        onInput: (e) => { onboardingData.weight = parseFloat(e.target.value) || 70; }
+      })
+    );
+
+    const goalWeightField = el('div', { class: 'onboarding-field' },
+      el('label', {}, "Goal Weight (kg)"),
+      el('input', {
+        type: 'number',
+        class: 'onboarding-input',
+        value: onboardingData.goalWeight,
+        min: '30',
+        max: '300',
+        step: '0.1',
+        onInput: (e) => { onboardingData.goalWeight = parseFloat(e.target.value) || 70; }
+      })
+    );
+
+    const row1 = el('div', { class: 'onboarding-field-row' }, genderField, ageField);
+    const row2 = el('div', { class: 'onboarding-field-row' }, heightField, weightField);
+    const row3 = el('div', { class: 'onboarding-field-row' }, goalWeightField);
+    
+    card.appendChild(row1);
+    card.appendChild(row2);
+    card.appendChild(row3);
+    
+    const prevBtn = el('button', {
+      class: 'btn btn-secondary',
+      onClick: () => {
+        onboardingStep = 1;
+        renderApp();
+      }
+    }, "Back");
+    
+    const nextBtn = el('button', {
+      class: 'btn btn-primary',
+      onClick: () => {
+        if (!onboardingData.age || !onboardingData.height || !onboardingData.weight) {
+          alert("Please fill in all body metrics.");
+          return;
+        }
+        onboardingStep = 3;
+        renderApp();
+      }
+    }, "Continue", icon(ICONS.chevronRight));
+    
+    card.appendChild(el('div', { class: 'onboarding-nav' }, prevBtn, nextBtn));
+
+  } else if (onboardingStep === 3) {
+    card.appendChild(el('h2', { style: { fontFamily: 'var(--font-display)', marginBottom: '8px' } }, "What is your activity level?"));
+    card.appendChild(el('p', { class: 'page-subtitle' }, "Active calorie burn calculations and TDEE targets adapt to your routine lifestyle activity."));
+    
+    const activities = [
+      { id: 'sedentary', title: 'Sedentary', desc: 'Little to no daily exercise. Desk job, minimal walking.' },
+      { id: 'light', title: 'Lightly Active', desc: 'Light exercise or walking 1–3 days per week. Moderate moving.' },
+      { id: 'moderate', title: 'Moderately Active', desc: 'Moderate exercise/sports 3–5 days per week. Active daily lifestyle.' },
+      { id: 'active', title: 'Very Active', desc: 'Hard training or intense sports 6–7 days per week. Highly physical job.' }
+    ];
+    
+    const grid = el('div', { class: 'onboarding-choice-grid' },
+      ...activities.map(a => el('div', {
+        class: `onboarding-choice-card ${onboardingData.activityLevel === a.id ? 'active' : ''}`,
+        onClick: () => {
+          onboardingData.activityLevel = a.id;
+          renderApp();
+        }
+      },
+        el('strong', {}, a.title),
+        el('span', {}, a.desc)
+      ))
+    );
+    card.appendChild(grid);
+    
+    const prevBtn = el('button', {
+      class: 'btn btn-secondary',
+      onClick: () => {
+        onboardingStep = 2;
+        renderApp();
+      }
+    }, "Back");
+    
+    const nextBtn = el('button', {
+      class: 'btn btn-primary',
+      onClick: () => {
+        calculateOnboardingTargets();
+        onboardingStep = 4;
+        renderApp();
+      }
+    }, "Calculate Targets", icon(ICONS.chevronRight));
+    
+    card.appendChild(el('div', { class: 'onboarding-nav' }, prevBtn, nextBtn));
+
+  } else if (onboardingStep === 4) {
+    card.appendChild(el('h2', { style: { fontFamily: 'var(--font-display)', marginBottom: '8px' } }, "Here are your calculated targets"));
+    card.appendChild(el('p', { class: 'page-subtitle' }, "Based on your metrics, these goals will optimize your consistency. You can adjust them below if desired."));
+    
+    const caloriesField = el('div', { class: 'onboarding-field' },
+      el('label', {}, "Calorie Target (kcal)"),
+      el('input', {
+        type: 'number',
+        class: 'onboarding-input',
+        value: onboardingData.targetCalories,
+        onInput: (e) => { onboardingData.targetCalories = parseInt(e.target.value) || 2000; }
+      })
+    );
+
+    const proteinField = el('div', { class: 'onboarding-field' },
+      el('label', {}, "Protein Target (g)"),
+      el('input', {
+        type: 'number',
+        class: 'onboarding-input',
+        value: onboardingData.targetProtein,
+        onInput: (e) => { onboardingData.targetProtein = parseInt(e.target.value) || 120; }
+      })
+    );
+
+    const waterField = el('div', { class: 'onboarding-field' },
+      el('label', {}, "Water Target (cups)"),
+      el('input', {
+        type: 'number',
+        class: 'onboarding-input',
+        value: onboardingData.targetWater,
+        onInput: (e) => { onboardingData.targetWater = parseInt(e.target.value) || 8; }
+      })
+    );
+
+    const stepsField = el('div', { class: 'onboarding-field' },
+      el('label', {}, "Steps Target"),
+      el('input', {
+        type: 'number',
+        class: 'onboarding-input',
+        value: onboardingData.targetSteps,
+        onInput: (e) => { onboardingData.targetSteps = parseInt(e.target.value) || 10000; }
+      })
+    );
+
+    const recsWrapper = el('div', { class: 'recommendations-wrapper' },
+      el('div', { class: 'recommendation-summary-grid' },
+        el('div', { class: 'recommendation-card primary' },
+          el('span', { class: 'rec-label' }, "Daily Energy"),
+          el('span', { class: 'rec-val' }, `${onboardingData.targetCalories} kcal`),
+          el('span', { class: 'rec-sub' }, "Optimized Intake")
+        ),
+        el('div', { class: 'recommendation-card' },
+          el('span', { class: 'rec-label' }, "Daily Fuel"),
+          el('span', { class: 'rec-val' }, `${onboardingData.targetProtein}g`),
+          el('span', { class: 'rec-sub' }, "Protein target")
+        ),
+        el('div', { class: 'recommendation-card' },
+          el('span', { class: 'rec-label' }, "Hydration"),
+          el('span', { class: 'rec-val' }, `${onboardingData.targetWater} cups`),
+          el('span', { class: 'rec-sub' }, "Fluid balance")
+        ),
+        el('div', { class: 'recommendation-card' },
+          el('span', { class: 'rec-label' }, "Steps"),
+          el('span', { class: 'rec-val' }, `${onboardingData.targetSteps.toLocaleString()}`),
+          el('span', { class: 'rec-sub' }, "Daily movement")
+        )
+      )
+    );
+    
+    card.appendChild(recsWrapper);
+
+    const row1 = el('div', { class: 'onboarding-field-row' }, caloriesField, proteinField);
+    const row2 = el('div', { class: 'onboarding-field-row' }, waterField, stepsField);
+    card.appendChild(row1);
+    card.appendChild(row2);
+    
+    const prevBtn = el('button', {
+      class: 'btn btn-secondary',
+      onClick: () => {
+        onboardingStep = 3;
+        renderApp();
+      }
+    }, "Back");
+    
+    const nextBtn = el('button', {
+      class: 'btn btn-primary',
+      onClick: () => {
+        onboardingStep = 5;
+        renderApp();
+      }
+    }, "Review Summary", icon(ICONS.chevronRight));
+    
+    card.appendChild(el('div', { class: 'onboarding-nav' }, prevBtn, nextBtn));
+
+  } else if (onboardingStep === 5) {
+    card.appendChild(el('h2', { style: { fontFamily: 'var(--font-display)', marginBottom: '8px' } }, "Ready to begin your tracking canvas"));
+    card.appendChild(el('p', { class: 'page-subtitle' }, "Here is a summary of your profile parameters. You can edit them at any time in App Settings."));
+    
+    const goalText = onboardingData.goal === 'lose' ? 'Fat Loss' : onboardingData.goal === 'build' ? 'Muscle Building' : onboardingData.goal === 'maintain' ? 'Maintenance' : 'General Wellness';
+    const activityText = onboardingData.activityLevel === 'sedentary' ? 'Sedentary' : onboardingData.activityLevel === 'light' ? 'Lightly Active' : onboardingData.activityLevel === 'moderate' ? 'Moderately Active' : 'Very Active';
+
+    const summaryList = el('div', { style: { margin: '24px 0', display: 'flex', flexDirection: 'column', gap: '12px' } },
+      el('p', { class: 'onboarding-summary-text' }, el('strong', {}, "Primary Goal: "), goalText),
+      el('p', { class: 'onboarding-summary-text' }, el('strong', {}, "Lifestyle Activity: "), activityText),
+      el('p', { class: 'onboarding-summary-text' }, el('strong', {}, "Current Weight: "), `${onboardingData.weight} kg (Goal: ${onboardingData.goalWeight} kg)`),
+      el('p', { class: 'onboarding-summary-text' }, el('strong', {}, "Calorie Goal: "), `${onboardingData.targetCalories} kcal / day`),
+      el('p', { class: 'onboarding-summary-text' }, el('strong', {}, "Protein Goal: "), `${onboardingData.targetProtein}g / day`),
+      el('p', { class: 'onboarding-summary-text' }, el('strong', {}, "Water Goal: "), `${onboardingData.targetWater} cups / day`),
+      el('p', { class: 'onboarding-summary-text' }, el('strong', {}, "Step Goal: "), `${onboardingData.targetSteps.toLocaleString()} steps / day`)
+    );
+    card.appendChild(summaryList);
+
+    const prevBtn = el('button', {
+      class: 'btn btn-secondary',
+      onClick: () => {
+        onboardingStep = 4;
+        renderApp();
+      }
+    }, "Back");
+    
+    const completeBtn = el('button', {
+      class: 'btn btn-primary',
+      onClick: () => {
+        state.profile = {
+          ...onboardingData,
+          completedOnboarding: true,
+          setupAt: new Date().toISOString()
+        };
+        
+        const todayLog = getTodayLog();
+        if (todayLog && (!todayLog.weight || todayLog.weight === 0)) {
+          todayLog.weight = onboardingData.weight;
+        }
+
+        saveLocalState();
+        if (state.user && firebase.db) {
+          saveUserPreferences();
+        }
+        
+        state.activeView = 'dashboard';
+        window.location.hash = '#dashboard';
+        renderApp();
+      }
+    }, "Complete Setup & Get Started", icon(ICONS.sparkles));
+
+    card.appendChild(el('div', { class: 'onboarding-nav' }, prevBtn, completeBtn));
+  }
+
+  wrapper.appendChild(card);
+  container.appendChild(wrapper);
+  return container;
+}
+
 function renderApp() {
   const shouldResetScroll = lastRenderedView !== state.activeView;
   
@@ -1313,6 +1812,8 @@ function renderApp() {
     const label = document.getElementById('desktop-date-label');
     if (label) label.textContent = formatLongDate(state.dateStr);
   }
+
+  const isOnboarding = !state.profile || !state.profile.completedOnboarding;
 
   // Update nav link active styling
   document.querySelectorAll('.nav-link, .bottom-nav-item').forEach(item => {
@@ -1324,9 +1825,30 @@ function renderApp() {
     }
   });
 
+  // Hide navigation headers/bars if onboarding is active
+  const desktopHeader = document.getElementById('desktop-header');
+  const mobileNavBar = document.getElementById('mobile-nav-bar');
+  if (isOnboarding && state.activeView !== 'auth') {
+    if (desktopHeader) desktopHeader.style.display = 'none';
+    if (mobileNavBar) mobileNavBar.style.display = 'none';
+  } else {
+    if (desktopHeader) desktopHeader.style.display = '';
+    if (mobileNavBar) mobileNavBar.style.display = '';
+  }
+
   const mainContainer = document.getElementById('view-target');
   if (!mainContainer) return;
   mainContainer.replaceChildren();
+
+  // Intercept with Onboarding if not completed
+  if (isOnboarding && state.activeView !== 'auth') {
+    mainContainer.appendChild(renderOnboarding());
+    if (shouldResetScroll) {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    }
+    lastRenderedView = 'onboarding';
+    return;
+  }
 
   // Render Mobile Header first
   if (state.activeView !== 'auth') {
@@ -1410,8 +1932,8 @@ function renderDashboard() {
   const habitsDone = (day.habitsCompleted || []).length;
   const habitPercent = habits.length ? Math.round((habitsDone / habits.length) * 100) : 0;
   
-  const calGoal = 2000;
-  const stepGoal = 10000;
+  const calGoal = state.profile?.targetCalories || 2000;
+  const stepGoal = state.profile?.targetSteps || 10000;
   
   const dailyScore = computeDailyScore(day, habitPercent);
 
@@ -1467,8 +1989,8 @@ function renderDashboard() {
       const dayHabitsDone = (dayLog.habitsCompleted || []).length;
       
       const dotsContainer = el('div', { class: 'day-dots' },
-        el('span', { class: `day-dot ${(dayLog.steps >= 10000) ? 'completed' : ''}` }),
-        el('span', { class: `day-dot ${(dayLog.water >= 8) ? 'completed' : ''}` }),
+        el('span', { class: `day-dot ${(dayLog.steps >= stepGoal) ? 'completed' : ''}` }),
+        el('span', { class: `day-dot ${(dayLog.water >= (state.profile?.targetWater || 8)) ? 'completed' : ''}` }),
         el('span', { class: `day-dot ${(dayHabitsDone > 0) ? 'completed' : ''}` })
       );
 
@@ -1493,8 +2015,7 @@ function renderDashboard() {
 
     // Readiness widget concentric rings SVG calculations
     const stepsDone = day.steps || 0;
-    const stepsGoal = 10000;
-    const stepsPercent = Math.min(1, stepsDone / stepsGoal);
+    const stepsPercent = Math.min(1, stepsDone / stepGoal);
     const stepsDash = stepsPercent * 311.02;
 
     const habitsTotal = habits.length;
@@ -1502,7 +2023,7 @@ function renderDashboard() {
     const habitsDash = habitsPercent * 235.62;
 
     const waterDone = day.water || 0;
-    const waterGoal = 8;
+    const waterGoal = state.profile?.targetWater || 8;
     const waterPercent = Math.min(1, waterDone / waterGoal);
     const waterDash = waterPercent * 160.22;
 
@@ -1671,7 +2192,7 @@ function renderDashboard() {
         ),
         el('div', { class: 'widget-card-center' },
           el('strong', { class: 'widget-card-value' }, day.steps.toLocaleString()),
-          el('span', { class: 'widget-card-meta' }, `${stepPercent}% of 10k goal`)
+          el('span', { class: 'widget-card-meta' }, `${stepPercent}% of ${stepGoal >= 1000 ? `${(stepGoal/1000).toFixed(0)}k` : stepGoal} goal`)
         ),
         el('button', {
           class: 'widget-quick-btn',
@@ -1709,7 +2230,7 @@ function renderDashboard() {
         ),
         el('div', { class: 'widget-card-center' },
           el('strong', { class: 'widget-card-value' }, `${day.sleep || 0}h`),
-          el('span', { class: 'widget-card-meta' }, `${Math.min(100, Math.round((day.sleep || 0)/8*100))}% of 8h target`)
+          el('span', { class: 'widget-card-meta' }, `${Math.min(100, Math.round((day.sleep || 0)/(state.profile?.targetSleep || 8)*100))}% of ${state.profile?.targetSleep || 8}h target`)
         ),
         el('button', {
           class: 'widget-quick-btn',
@@ -1727,7 +2248,7 @@ function renderDashboard() {
           el('div', { class: 'widget-icon-box water' }, icon(ICONS.water))
         ),
         el('div', { class: 'widget-card-center' },
-          el('strong', { class: 'widget-card-value' }, `${day.water || 0} / 8`),
+          el('strong', { class: 'widget-card-value' }, `${day.water || 0} / ${state.profile?.targetWater || 8}`),
           el('span', { class: 'widget-card-meta' }, "Cups consumed today")
         ),
         el('button', {
@@ -1768,6 +2289,48 @@ function renderDashboard() {
 
   // --- SUB TAB: AI COACH & TRENDS ---
   const renderCoachAndTrends = () => {
+    const trends = getWeeklyTrends(state.dateStr);
+
+    // Check auto-synthesis at 9:00 PM
+    const autoSynthesizeIfNeeded = async () => {
+      if (day.aiReview) return;
+      const todayDateStr = new Date().toISOString().split('T')[0];
+      if (state.dateStr !== todayDateStr) return; // Only for current day
+      
+      const currentHour = new Date().getHours();
+      if (currentHour >= 21) { // 9:00 PM or later
+        console.log("Auto-triggering 9:00 PM AI Review synthesis...");
+        const history = [];
+        const dates = Object.keys(state.logs).sort().reverse();
+        for (let d of dates) {
+          if (d !== state.dateStr && history.length < 3) {
+            history.push({ date: d, ...state.logs[d] });
+          }
+        }
+        
+        try {
+          const review = await gemini.getDailyReview({
+            date: state.dateStr,
+            workouts: day.workouts,
+            calories: day.calories,
+            protein: day.protein,
+            steps: day.steps,
+            sleep: day.sleep,
+            water: day.water,
+            weight: day.weight,
+            calorieGoal: calGoal,
+            trends: trends
+          }, history);
+          
+          day.aiReview = review;
+          queueSave();
+          renderCoachAndTrendsSubView();
+        } catch (err) {
+          console.error("Auto-synthesis failed:", err);
+        }
+      }
+    };
+    autoSynthesizeIfNeeded();
     
     // AI Coach bubble card
     const coachPanel = el('div', { class: 'ai-coach-bubble-card' });
@@ -1796,67 +2359,407 @@ function renderDashboard() {
           water: day.water,
           weight: day.weight,
           calorieGoal: calGoal,
-          trends: getWeeklyTrends(state.dateStr)
+          trends: trends
         }, history);
         
         day.aiReview = review;
         queueSave();
         renderCoachAndTrendsSubView();
       }
-    }, "Begin AI Synthesis");
+    }, "Analyze Logs & Synthesize Insights");
 
     const renderCoachAndTrendsSubView = () => {
       coachPanel.replaceChildren();
 
       if (day.aiReview) {
+        let recoveryColor = 'var(--colors-success)';
+        let recoveryBg = 'rgba(46, 125, 50, 0.1)';
+        const recNeed = day.aiReview.recoveryNeed || "Medium";
+        if (recNeed === "High") {
+          recoveryColor = 'var(--colors-error)';
+          recoveryBg = 'rgba(198, 40, 40, 0.1)';
+        } else if (recNeed === "Medium") {
+          recoveryColor = 'var(--colors-accent-amber)';
+          recoveryBg = 'rgba(239, 108, 0, 0.1)';
+        }
+
+        // Daily Score SVG Circle Gauge
+        const scoreVal = day.aiReview.score || 0;
+        const radius = 22;
+        const strokeWidth = 4.5;
+        const circumference = 2 * Math.PI * radius;
+        const strokeDashoffset = circumference - (scoreVal / 100) * circumference;
+
+        const scoreGauge = elNS('svg', { 
+          width: '56', 
+          height: '56', 
+          viewBox: '0 0 56 56',
+          style: { transform: 'rotate(-90deg)', filter: 'drop-shadow(0 0 4px rgba(232, 165, 90, 0.2))' } 
+        },
+          elNS('circle', { 
+            cx: '28', 
+            cy: '28', 
+            r: radius, 
+            fill: 'none', 
+            stroke: 'rgba(255,255,255,0.06)', 
+            'stroke-width': strokeWidth 
+          }),
+          elNS('circle', { 
+            cx: '28', 
+            cy: '28', 
+            r: radius, 
+            fill: 'none', 
+            stroke: 'var(--colors-accent-amber)', 
+            'stroke-width': strokeWidth,
+            'stroke-dasharray': circumference,
+            'stroke-dashoffset': strokeDashoffset,
+            'stroke-linecap': 'round',
+            style: { transition: 'stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1)' }
+          })
+        );
+
+        const scoreWidget = el('div', { 
+          style: { 
+            display: 'inline-flex', 
+            alignItems: 'center', 
+            gap: '12px',
+            background: 'rgba(255,255,255,0.04)',
+            padding: '4px 14px 4px 6px',
+            borderRadius: 'var(--rounded-pill)',
+            border: '1px solid rgba(255,255,255,0.06)'
+          } 
+        },
+          scoreGauge,
+          el('div', { style: { display: 'flex', flexDirection: 'column' } },
+            el('span', { style: { fontSize: '9px', textTransform: 'uppercase', color: 'var(--colors-on-dark-soft)', fontWeight: '800', letterSpacing: '0.05em' } }, "Daily Score"),
+            el('strong', { style: { fontSize: '18px', color: 'var(--colors-on-dark)', fontFamily: 'var(--font-display)', fontWeight: '800', lineHeight: '1.1' } }, `${scoreVal}`),
+            el('span', { style: { fontSize: '9px', color: 'var(--colors-on-dark-soft)', marginTop: '1px' } }, "points")
+          )
+        );
+
         coachPanel.appendChild(
-          el('div', { class: 'ai-coach-bubble-header' },
-            el('div', { class: 'ai-coach-avatar' }, "AI"),
-            el('div', { class: 'ai-coach-meta-info' },
-              el('strong', {}, "Coach Gemini"),
-              el('span', {}, day.aiReview.rating || "Holistic Analysis")
+          el('div', { class: 'ai-coach-bubble-header', style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '12px' } },
+            el('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
+              el('div', { class: 'ai-coach-avatar' }, "AI"),
+              el('div', { class: 'ai-coach-meta-info' },
+                el('strong', {}, "Coach Gemini"),
+                el('span', {}, `Style: ${localStorage.getItem('lt_coach_personality') || 'Elite'}`)
+              )
+            ),
+            el('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+              scoreWidget,
+              el('span', { 
+                style: { 
+                  fontSize: '11px', 
+                  fontWeight: '800', 
+                  textTransform: 'uppercase', 
+                  color: recoveryColor, 
+                  backgroundColor: recoveryBg,
+                  padding: '6px 12px',
+                  borderRadius: 'var(--rounded-pill)',
+                  border: `1px solid ${recoveryColor}33`
+                } 
+              }, `${recNeed} Recovery`)
             )
           )
         );
 
-        const listItems = (day.aiReview.recommendation || "")
-          .split('\n')
-          .filter(line => line.trim().startsWith('-'))
-          .map(line => el('li', {}, line.replace('-', '').trim()));
-
-        const content = el('div', { class: 'ai-coach-content' },
-          el('div', { class: 'ai-coach-bubble' },
-            el('p', {}, day.aiReview.critique)
-          ),
-          listItems.length > 0 
-            ? el('div', {},
-                el('h4', { style: { color: 'var(--colors-on-dark)', marginBottom: '8px' } }, "Tomorrow's Action Items:"),
-                el('ul', { class: 'ai-coach-bullets' }, ...listItems)
-              )
-            : null,
-          el('button', {
-            class: 'btn btn-secondary',
-            style: { alignSelf: 'flex-start', marginTop: '16px', background: 'transparent', color: 'var(--colors-on-dark)', borderColor: 'rgba(255,255,255,0.2)' },
-            onClick: () => {
-              day.aiReview = null;
-              queueSave();
-              renderCoachAndTrendsSubView();
-            }
-          }, "Reset Insights")
+        const recommendationCard = el('div', { 
+          style: { 
+            background: 'rgba(255, 255, 255, 0.04)', 
+            borderLeft: '4px solid var(--colors-accent-amber)', 
+            padding: '12px 16px', 
+            borderRadius: '0 var(--rounded-md) var(--rounded-md) 0',
+            marginTop: '12px'
+          } 
+        },
+          el('span', { style: { display: 'block', fontSize: '11px', textTransform: 'uppercase', color: 'var(--colors-on-dark-soft)', fontWeight: '800', marginBottom: '4px' } }, "Actionable Recommendation"),
+          el('p', { style: { fontSize: '14px', margin: '0', color: 'var(--colors-on-dark)', fontStyle: 'italic', lineHeight: '1.4' } }, day.aiReview.actionableRecommendation)
         );
-        
-        coachPanel.appendChild(content);
-      } else {
-        coachPanel.appendChild(
-          el('div', { style: { textAlign: 'center', padding: '24px 0' } },
-            el('h3', { style: { color: 'var(--colors-on-dark)', marginBottom: '12px' } }, "AI Holistic Lifestyle Coach"),
-            el('p', { style: { color: 'var(--colors-on-dark-soft)', marginBottom: '24px', fontSize: '14.5px' } }, 
-              "Synthesizes your training, steps, diet, and recovery logs to output a targeted review."
-            ),
-            loadBtn
+
+        const winsList = (day.aiReview.wins || []).map(win => el('li', { style: { fontSize: '13.5px', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', listStyle: 'none', position: 'relative', paddingLeft: '16px' } }, 
+          el('span', { style: { position: 'absolute', left: '0', color: '#81c784' } }, "✓"), 
+          win
+        ));
+        const missesList = (day.aiReview.missedOpportunities || []).map(miss => el('li', { style: { fontSize: '13.5px', color: 'rgba(255,255,255,0.85)', marginBottom: '4px', listStyle: 'none', position: 'relative', paddingLeft: '16px' } }, 
+          el('span', { style: { position: 'absolute', left: '0', color: '#e57373' } }, "•"), 
+          miss
+        ));
+
+        const detailsGrid = el('div', { 
+          style: { 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', 
+            gap: '16px', 
+            marginTop: '16px', 
+            borderTop: '1px solid rgba(255,255,255,0.06)',
+            paddingTop: '16px'
+          } 
+        },
+          el('div', {},
+            el('h4', { style: { color: '#81c784', fontSize: '12px', textTransform: 'uppercase', fontWeight: '800', marginBottom: '8px' } }, "Wins"),
+            el('ul', { style: { padding: '0', margin: '0' } }, ...winsList)
+          ),
+          el('div', {},
+            el('h4', { style: { color: '#e57373', fontSize: '12px', textTransform: 'uppercase', fontWeight: '800', marginBottom: '8px' } }, "Missed Opportunities"),
+            el('ul', { style: { padding: '0', margin: '0' } }, ...missesList)
           )
         );
+
+        const prioritiesList = (day.aiReview.tomorrowPriorities || []).map((prio, idx) => el('li', { 
+          style: { 
+            fontSize: '13.5px', 
+            color: 'var(--colors-on-dark-soft)', 
+            marginBottom: '6px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px' 
+          } 
+        }, 
+          el('span', { 
+            style: { 
+              display: 'inline-flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              width: '18px', 
+              height: '18px', 
+              borderRadius: '50%', 
+              backgroundColor: 'rgba(255,255,255,0.1)', 
+              fontSize: '10px', 
+              fontWeight: 'bold', 
+              color: 'var(--colors-accent-amber)' 
+            } 
+          }, idx + 1),
+          el('span', {}, prio)
+        ));
+
+        const prioritiesBox = el('div', { 
+          style: { 
+            marginTop: '16px', 
+            borderTop: '1px solid rgba(255,255,255,0.06)', 
+            paddingTop: '16px' 
+          } 
+        },
+          el('h4', { style: { color: 'var(--colors-on-dark)', fontSize: '13px', fontWeight: '700', marginBottom: '10px' } }, "Tomorrow's Top Priorities"),
+          el('ul', { style: { padding: '0', margin: '0', listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '4px' } }, ...prioritiesList)
+        );
+
+        const resetBtn = el('button', {
+          class: 'btn btn-secondary',
+          style: { alignSelf: 'flex-start', marginTop: '20px', background: 'transparent', color: 'var(--colors-on-dark)', borderColor: 'rgba(255,255,255,0.2)', height: '32px', fontSize: '12.5px' },
+          onClick: () => {
+            day.aiReview = null;
+            queueSave();
+            renderCoachAndTrendsSubView();
+          }
+        }, "Reset Insights");
+
+        coachPanel.appendChild(recommendationCard);
+        coachPanel.appendChild(detailsGrid);
+        coachPanel.appendChild(prioritiesBox);
+        coachPanel.appendChild(resetBtn);
+      } else {
+        const welcomeGraphic = el('div', { 
+          style: { 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            padding: '24px 0 16px 0',
+            gap: '12px'
+          } 
+        },
+          elNS('svg', { 
+            class: 'ai-orbit-graphic',
+            width: '90', 
+            height: '90', 
+            viewBox: '0 0 120 120',
+            style: { filter: 'drop-shadow(0 0 8px rgba(232, 165, 90, 0.15))', marginBottom: '4px' }
+          },
+            // Center glowing circle
+            elNS('circle', { cx: '60', cy: '60', r: '7', fill: 'var(--colors-accent-amber)' }),
+            // Outer concentric tracks
+            elNS('circle', { cx: '60', cy: '60', r: '26', fill: 'none', stroke: 'rgba(255, 255, 255, 0.08)', 'stroke-width': '1.5' }),
+            elNS('circle', { cx: '60', cy: '60', r: '42', fill: 'none', stroke: 'rgba(255, 255, 255, 0.05)', 'stroke-width': '1.5', 'stroke-dasharray': '15 10' }),
+            elNS('circle', { cx: '60', cy: '60', r: '52', fill: 'none', stroke: 'rgba(255, 255, 255, 0.03)', 'stroke-width': '1', 'stroke-dasharray': '5 15' }),
+            // Orbiting particles
+            elNS('circle', { cx: '86', cy: '60', r: '4.5', fill: 'var(--colors-primary)' }),
+            elNS('circle', { cx: '28', cy: '28', r: '3', fill: 'var(--colors-accent-amber)' })
+          ),
+          el('h3', { style: { color: 'var(--colors-on-dark)', marginBottom: '4px', fontFamily: 'var(--font-display)', fontSize: '18px', fontWeight: '700' } }, "AI Lifestyle Command Center"),
+          el('p', { style: { color: 'var(--colors-on-dark-soft)', marginBottom: '16px', fontSize: '13.5px', maxWidth: '340px', lineHeight: '1.4', textAlign: 'center' } },
+            "Synthesize today's strength splits, step counts, and calories to generate an elite-level fitness performance review."
+          ),
+          loadBtn
+        );
+        coachPanel.appendChild(welcomeGraphic);
       }
+
+      // 6. INTERACTIVE COACH CHAT SECTION
+      const chatSection = el('div', { class: 'chat-section', style: { display: 'flex', flexDirection: 'column', marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px' } });
+      
+      const chatTitleRow = el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' } },
+        el('h4', { style: { color: 'var(--colors-on-dark)', margin: '0', fontSize: '14px', fontWeight: '700', fontFamily: 'var(--font-display)' } }, "Interactive Health Coach Chat"),
+        day.chatHistory && day.chatHistory.length > 0
+          ? el('button', {
+              class: 'btn btn-text',
+              style: { color: 'rgba(255,255,255,0.4)', padding: '2px', fontSize: '11px', margin: '0' },
+              onClick: () => {
+                if (confirm("Clear chat conversation history for today?")) {
+                  day.chatHistory = [];
+                  queueSave();
+                  renderCoachAndTrendsSubView();
+                }
+              }
+            }, "Clear Chat")
+          : null
+      );
+      chatSection.appendChild(chatTitleRow);
+
+      const messagesBox = el('div', { 
+        class: 'chat-messages-container', 
+        style: { 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '12px', 
+          maxHeight: '320px', 
+          overflowY: 'auto', 
+          padding: '4px 8px 12px 4px', 
+          marginBottom: '12px',
+          minHeight: '100px'
+        } 
+      });
+
+      if (!day.chatHistory || day.chatHistory.length === 0) {
+        messagesBox.appendChild(
+          el('div', { style: { color: 'var(--colors-on-dark-soft)', fontStyle: 'italic', fontSize: '13px', textAlign: 'center', padding: '24px 12px' } },
+            "Ask Coach Gemini anything about today's logs, weekly averages, step targets, or workout recovery."
+          )
+        );
+      } else {
+        day.chatHistory.forEach(msg => {
+          const isUser = msg.role === 'user';
+          const bubble = el('div', {
+            style: {
+              alignSelf: isUser ? 'flex-end' : 'flex-start',
+              maxWidth: '85%',
+              display: 'flex',
+              gap: '8px',
+              flexDirection: isUser ? 'row-reverse' : 'row',
+              alignItems: 'flex-start'
+            }
+          },
+            !isUser ? el('div', { class: 'chat-avatar-small', style: { width: '24px', height: '24px', borderRadius: '50%', background: 'var(--colors-accent-amber)', color: 'var(--colors-canvas-dark)', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0', marginTop: '2px' } }, "AI") : null,
+            el('div', {
+              style: {
+                background: isUser ? 'rgba(232, 165, 90, 0.15)' : 'rgba(255,255,255,0.05)',
+                border: isUser ? '1px solid rgba(232, 165, 90, 0.25)' : '1px solid rgba(255,255,255,0.08)',
+                color: 'var(--colors-on-dark)',
+                padding: '8px 12px',
+                borderRadius: isUser ? '14px 14px 2px 14px' : '14px 14px 14px 2px',
+                fontSize: '13.5px',
+                lineHeight: '1.45',
+                whiteSpace: 'pre-wrap'
+              }
+            }, msg.text)
+          );
+          messagesBox.appendChild(bubble);
+        });
+      }
+      chatSection.appendChild(messagesBox);
+
+      // Scroll to bottom helper
+      setTimeout(() => {
+        messagesBox.scrollTop = messagesBox.scrollHeight;
+      }, 50);
+
+      // Typing Bar
+      const inputEl = el('input', {
+        type: 'text',
+        placeholder: 'Ask Coach Gemini...',
+        class: 'form-control chat-input-field',
+        style: {
+          flex: '1',
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          color: 'var(--colors-on-dark)',
+          borderRadius: 'var(--rounded-pill)',
+          height: '36px',
+          padding: '0 16px',
+          fontSize: '13px'
+        },
+        onKeydown: (e) => {
+          if (e.key === 'Enter') {
+            sendBtn.click();
+          }
+        }
+      });
+
+      const sendBtn = el('button', {
+        class: 'btn btn-primary chat-send-btn',
+        style: {
+          borderRadius: '50%',
+          width: '36px',
+          height: '36px',
+          padding: '0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: '0'
+        },
+        onClick: async () => {
+          const userText = inputEl.value.trim();
+          if (!userText) return;
+
+          inputEl.value = '';
+          inputEl.disabled = true;
+          sendBtn.disabled = true;
+
+          // Add to chat history
+          if (!day.chatHistory) day.chatHistory = [];
+          day.chatHistory.push({ role: 'user', text: userText });
+          queueSave();
+          renderCoachAndTrendsSubView();
+
+          // Render loading indicator inside chat
+          const loadingBubble = el('div', {
+            style: {
+              alignSelf: 'flex-start',
+              maxWidth: '85%',
+              display: 'flex',
+              gap: '8px',
+              alignItems: 'center',
+              marginTop: '8px'
+            }
+          },
+            el('div', { class: 'chat-avatar-small', style: { width: '24px', height: '24px', borderRadius: '50%', background: 'var(--colors-accent-amber)', color: 'var(--colors-canvas-dark)', fontSize: '10px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: '0' } }, "AI"),
+            el('span', { class: 'chat-typing-loader', style: { color: 'var(--colors-on-dark-soft)', fontSize: '12.5px', fontStyle: 'italic' } }, "Coach Gemini is thinking...")
+          );
+          messagesBox.appendChild(loadingBubble);
+          messagesBox.scrollTop = messagesBox.scrollHeight;
+
+          try {
+            const reply = await gemini.sendCoachChatMessage(userText, day.chatHistory.slice(0, -1), day, trends);
+            
+            // Remove loader and update UI
+            day.chatHistory.push({ role: 'model', text: reply });
+            queueSave();
+            renderCoachAndTrendsSubView();
+          } catch (err) {
+            console.error("Chat message error:", err);
+            day.chatHistory.push({ role: 'model', text: "Error: Failed to fetch reply from coach." });
+            queueSave();
+            renderCoachAndTrendsSubView();
+          }
+        }
+      }, icon(ICONS.sparkles));
+
+      const inputRow = el('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } },
+        inputEl,
+        sendBtn
+      );
+      chatSection.appendChild(inputRow);
+      coachPanel.appendChild(chatSection);
     };
 
     renderCoachAndTrendsSubView();
@@ -1865,30 +2768,80 @@ function renderDashboard() {
     const trends = getWeeklyTrends(state.dateStr);
     const trendSign = trends.weightChange7d > 0 ? '+' : '';
     
+    // Calculate weight status values
+    const wChange = trends.weightChange7d || 0;
+    let wLabel = "Stable";
+    let wColor = "var(--colors-muted)";
+    let wBg = "var(--colors-surface-soft)";
+    
+    if (wChange > 0.05) {
+      wLabel = "Surplus";
+      wColor = "var(--colors-accent-amber)";
+      wBg = "rgba(232, 165, 90, 0.08)";
+    } else if (wChange < -0.05) {
+      wLabel = "Deficit";
+      wColor = "var(--colors-primary)";
+      wBg = "rgba(204, 120, 92, 0.08)";
+    }
+    
     const trendsWidget = el('div', { class: 'dashboard-right' },
       el('div', { class: 'page-header' },
         el('h4', {}, "7-Day Historical Averages")
       ),
       el('div', { class: 'trend-grid' },
-        el('div', { class: 'trend-tile' },
+        // Steps Tile (Target: stepGoal)
+        el('div', { class: 'trend-tile', style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
           el('span', { class: 'trend-tile-label' }, "Avg Steps"),
-          el('strong', { class: 'trend-tile-value' }, trends.avgSteps7d > 0 ? trends.avgSteps7d.toLocaleString() : "-"),
-          el('span', { class: 'trend-tile-meta' }, "Steps per day")
+          el('strong', { class: 'trend-tile-value' }, trends.avgSteps7d > 0 ? Math.round(trends.avgSteps7d).toLocaleString() : "-"),
+          el('div', { style: { width: '100%', height: '4px', backgroundColor: 'var(--colors-surface-soft)', borderRadius: '2px', overflow: 'hidden', marginTop: '6px' } },
+            el('div', { style: { width: `${Math.min(100, Math.round((trends.avgSteps7d / stepGoal) * 100))}%`, height: '100%', backgroundColor: 'var(--colors-primary)', borderRadius: '2px' } })
+          ),
+          el('span', { class: 'trend-tile-meta', style: { marginTop: '2px' } }, 
+            trends.avgSteps7d > 0 ? `${Math.round((trends.avgSteps7d / stepGoal) * 100)}% of ${stepGoal >= 1000 ? `${(stepGoal/1000).toFixed(0)}k` : stepGoal} target` : "No steps logged"
+          )
         ),
-        el('div', { class: 'trend-tile' },
+        // Sleep Tile (Target: Sleep Goal)
+        el('div', { class: 'trend-tile', style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
           el('span', { class: 'trend-tile-label' }, "Avg Sleep"),
-          el('strong', { class: 'trend-tile-value' }, trends.avgSleep7d > 0 ? `${trends.avgSleep7d}h` : "-"),
-          el('span', { class: 'trend-tile-meta' }, "Hours of recovery")
+          el('strong', { class: 'trend-tile-value' }, trends.avgSleep7d > 0 ? `${trends.avgSleep7d.toFixed(1)}h` : "-"),
+          el('div', { style: { width: '100%', height: '4px', backgroundColor: 'var(--colors-surface-soft)', borderRadius: '2px', overflow: 'hidden', marginTop: '6px' } },
+            el('div', { style: { width: `${Math.min(100, Math.round((trends.avgSleep7d / (state.profile?.targetSleep || 8)) * 100))}%`, height: '100%', backgroundColor: 'var(--colors-accent-amber)', borderRadius: '2px' } })
+          ),
+          el('span', { class: 'trend-tile-meta', style: { marginTop: '2px' } }, 
+            trends.avgSleep7d > 0 ? `${Math.round((trends.avgSleep7d / (state.profile?.targetSleep || 8)) * 100)}% of ${state.profile?.targetSleep || 8}h protocol` : "No sleep logged"
+          )
         ),
-        el('div', { class: 'trend-tile' },
+        // Calories Tile (Target: calGoal)
+        el('div', { class: 'trend-tile', style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
           el('span', { class: 'trend-tile-label' }, "Avg Intake"),
-          el('strong', { class: 'trend-tile-value' }, trends.avgCalories7d > 0 ? `${trends.avgCalories7d} kcal` : "-"),
-          el('span', { class: 'trend-tile-meta' }, "Energy logged")
+          el('strong', { class: 'trend-tile-value' }, trends.avgCalories7d > 0 ? `${Math.round(trends.avgCalories7d)} kcal` : "-"),
+          el('div', { style: { width: '100%', height: '4px', backgroundColor: 'var(--colors-surface-soft)', borderRadius: '2px', overflow: 'hidden', marginTop: '6px' } },
+            el('div', { style: { width: `${Math.min(100, Math.round((trends.avgCalories7d / calGoal) * 100))}%`, height: '100%', backgroundColor: 'var(--colors-accent-blue)', borderRadius: '2px' } })
+          ),
+          el('span', { class: 'trend-tile-meta', style: { marginTop: '2px' } }, 
+            trends.avgCalories7d > 0 ? `${Math.round((trends.avgCalories7d / calGoal) * 100)}% of ${calGoal >= 1000 ? `${(calGoal/1000).toFixed(1).replace('.0', '')}k` : calGoal} target` : "No calories logged"
+          )
         ),
-        el('div', { class: 'trend-tile' },
+        // Weight Tile (With custom badge)
+        el('div', { class: 'trend-tile', style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
           el('span', { class: 'trend-tile-label' }, "Weight Change"),
-          el('strong', { class: 'trend-tile-value' }, trends.weightChange7d !== 0 ? `${trendSign}${trends.weightChange7d.toFixed(1)}kg` : "Stable"),
-          el('span', { class: 'trend-tile-meta' }, "7-day weight shift")
+          el('strong', { class: 'trend-tile-value' }, wChange !== 0 ? `${trendSign}${wChange.toFixed(1)}kg` : "Stable"),
+          el('div', { style: { marginTop: '6px' } },
+            el('span', { 
+              style: { 
+                display: 'inline-flex', 
+                fontSize: '10px', 
+                fontWeight: '800', 
+                textTransform: 'uppercase', 
+                color: wColor, 
+                backgroundColor: wBg, 
+                padding: '2px 8px', 
+                borderRadius: 'var(--rounded-pill)',
+                border: `1px solid ${wColor}22`
+              } 
+            }, wLabel)
+          ),
+          el('span', { class: 'trend-tile-meta', style: { marginTop: '6px' } }, "7-day weight shift")
         )
       )
     );
@@ -2136,8 +3089,8 @@ function renderFitness() {
       activeContent.appendChild(exerciseList);
 
     } else if (tab === 'nutrition') {
-      const calGoal = 2000;
-      const proteinGoal = 150;
+      const calGoal = state.profile?.targetCalories || 2000;
+      const proteinGoal = state.profile?.targetProtein || 150;
       
       const calPercent = Math.min(100, Math.round(((day.calories || 0) / calGoal) * 100));
       const proteinPercent = Math.min(100, Math.round(((day.protein || 0) / proteinGoal) * 100));
@@ -2185,6 +3138,180 @@ function renderFitness() {
       );
       progressCard.appendChild(actionsRow);
 
+      // AI Smart Meal Logger
+      if (!state._aiMealText) state._aiMealText = '';
+      if (state._aiMealLoading === undefined) state._aiMealLoading = false;
+      if (!state._aiMealEstimate) state._aiMealEstimate = null;
+
+      const aiLoggerCard = el('div', { class: 'form-card ai-smart-logger-card', style: { marginTop: '24px' } },
+        el('h3', {}, "Smart Log with AI Coach"),
+        el('p', { class: 'page-subtitle' }, "Type your meal details with quantities in grams (e.g. '150g grilled chicken, 150g jasmine rice') and the AI will estimate macros (kcal, protein, carbs, fat) and log it."),
+        el('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' } },
+          el('textarea', {
+            class: 'form-control',
+            placeholder: "Describe your meal (e.g., '3 boiled eggs, 2 slices whole wheat toast, 10g butter')...",
+            style: { height: '80px', fontSize: '13.5px', resize: 'vertical' },
+            value: state._aiMealText,
+            onInput: (e) => { state._aiMealText = e.target.value; }
+          }),
+          el('button', {
+            class: 'btn btn-primary',
+            style: { width: 'fit-content', display: 'flex', alignItems: 'center', gap: '8px' },
+            disabled: state._aiMealLoading,
+            onClick: async (e) => {
+              const text = state._aiMealText.trim();
+              if (!text) {
+                alert("Please describe your meal first.");
+                return;
+              }
+              state._aiMealLoading = true;
+              renderFitnessSubTab('nutrition');
+              
+              try {
+                const result = await gemini.analyzeMeal(text);
+                state._aiMealEstimate = result;
+              } catch (err) {
+                alert(`Analysis failed: ${err.message}`);
+              } finally {
+                state._aiMealLoading = false;
+                renderFitnessSubTab('nutrition');
+              }
+            }
+          }, state._aiMealLoading ? "Analyzing Macros..." : "Analyze Meal & Estimate")
+        )
+      );
+
+      if (state._aiMealLoading) {
+        aiLoggerCard.appendChild(
+          el('div', { 
+            style: { 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: '10px', 
+              padding: '16px', 
+              marginTop: '16px', 
+              background: 'var(--colors-canvas)',
+              borderRadius: 'var(--rounded-md)',
+              border: '1px dashed var(--colors-hairline)'
+            } 
+          },
+            el('div', { class: 'ai-loading-pulse', style: { width: '12px', height: '12px', borderRadius: '50%', background: 'var(--colors-primary)', animation: 'pulse 1.5s infinite ease-in-out' } }),
+            el('span', { style: { fontSize: '13px', color: 'var(--colors-muted)', fontWeight: '600' } }, "Coach is calculating nutritional breakdown...")
+          )
+        );
+      } else if (state._aiMealEstimate) {
+        const est = state._aiMealEstimate;
+        
+        const titleInput = el('input', { type: 'text', class: 'form-control', value: est.mealTitle, style: { height: '34px', fontSize: '13px' } });
+        const calInput = el('input', { type: 'number', class: 'form-control', value: est.calories, style: { height: '34px', fontSize: '13px', textAlign: 'center' } });
+        const protInput = el('input', { type: 'number', class: 'form-control', value: est.protein, style: { height: '34px', fontSize: '13px', textAlign: 'center' } });
+        const carbsInput = el('input', { type: 'number', class: 'form-control', value: est.carbs || 0, style: { height: '34px', fontSize: '13px', textAlign: 'center' } });
+        const fatInput = el('input', { type: 'number', class: 'form-control', value: est.fat || 0, style: { height: '34px', fontSize: '13px', textAlign: 'center' } });
+        
+        const saveToLibraryCheckbox = el('input', { type: 'checkbox', style: { cursor: 'pointer' } });
+        
+        const previewBlock = el('div', { 
+          style: { 
+            marginTop: '16px', 
+            padding: '16px', 
+            background: 'var(--colors-canvas)', 
+            borderRadius: 'var(--rounded-md)', 
+            border: '1px solid var(--colors-hairline-soft)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px'
+          } 
+        },
+          el('h4', { style: { fontSize: '14px', fontWeight: '700', color: 'var(--colors-ink)', margin: '0' } }, "AI Macro Estimates"),
+          el('p', { style: { fontSize: '12px', color: 'var(--colors-muted)', margin: '0', fontStyle: 'italic' } }, est.explanation),
+          
+          el('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
+            el('span', { class: 'form-label', style: { fontSize: '11px' } }, "Meal Title"),
+            titleInput
+          ),
+          
+          el('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' } },
+            el('div', {}, 
+              el('span', { class: 'form-label', style: { fontSize: '10px', textAlign: 'center', display: 'block' } }, "Kcal"),
+              calInput
+            ),
+            el('div', {}, 
+              el('span', { class: 'form-label', style: { fontSize: '10px', textAlign: 'center', display: 'block' } }, "Protein (g)"),
+              protInput
+            ),
+            el('div', {}, 
+              el('span', { class: 'form-label', style: { fontSize: '10px', textAlign: 'center', display: 'block' } }, "Carbs (g)"),
+              carbsInput
+            ),
+            el('div', {}, 
+              el('span', { class: 'form-label', style: { fontSize: '10px', textAlign: 'center', display: 'block' } }, "Fat (g)"),
+              fatInput
+            )
+          ),
+          
+          el('label', { style: { display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', marginTop: '4px' } },
+            saveToLibraryCheckbox,
+            el('span', {}, "Save this custom recipe to Meal Library")
+          ),
+          
+          el('div', { style: { display: 'flex', gap: '10px', marginTop: '8px' } },
+            el('button', {
+              class: 'btn btn-primary',
+              style: { height: '34px', fontSize: '13px', padding: '0 16px' },
+              onClick: () => {
+                const finalTitle = titleInput.value.trim() || "AI Meal Log";
+                const finalCal = parseInt(calInput.value) || 0;
+                const finalProt = parseInt(protInput.value) || 0;
+                const finalCarbs = parseInt(carbsInput.value) || 0;
+                const finalFat = parseInt(fatInput.value) || 0;
+                
+                day.calories = (day.calories || 0) + finalCal;
+                day.protein = (day.protein || 0) + finalProt;
+                if (!day.meals) day.meals = [];
+                day.meals.push({
+                  title: finalTitle,
+                  serving: '1 serving',
+                  multiplier: 1,
+                  calories: finalCal,
+                  protein: finalProt,
+                  carbs: finalCarbs,
+                  fat: finalFat
+                });
+                
+                if (saveToLibraryCheckbox.checked) {
+                  state.recipes.push({
+                    title: finalTitle,
+                    calories: finalCal,
+                    protein: finalProt,
+                    carbs: finalCarbs,
+                    fat: finalFat,
+                    desc: est.explanation
+                  });
+                  saveLocalState();
+                }
+                
+                state._aiMealText = '';
+                state._aiMealEstimate = null;
+                
+                syncDailyProgress(day);
+                queueSave();
+                renderFitnessSubTab('nutrition');
+              }
+            }, "Confirm & Log"),
+            el('button', {
+              class: 'btn btn-secondary',
+              style: { height: '34px', fontSize: '13px', padding: '0 16px', background: 'transparent' },
+              onClick: () => {
+                state._aiMealEstimate = null;
+                renderFitnessSubTab('nutrition');
+              }
+            }, "Reset")
+          )
+        );
+        aiLoggerCard.appendChild(previewBlock);
+      }
+
       // Logged meals list
       const mealsList = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' } });
       const renderMealsList = () => {
@@ -2200,7 +3327,7 @@ function renderFitness() {
               el('div', { class: 'habit-row-item' },
                 el('div', { class: 'habit-left-info' },
                   el('div', { style: { width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--colors-accent-terracotta)' } }),
-                  el('span', { class: 'habit-title-text' }, `${m.title} (${m.calories} kcal, ${m.protein}g protein)`)
+                  el('span', { class: 'habit-title-text' }, `${m.title} (${m.calories} kcal · P: ${m.protein}g · C: ${m.carbs || 0}g · F: ${m.fat || 0}g)`)
                 ),
                 el('button', {
                   class: 'btn btn-text',
@@ -2228,7 +3355,7 @@ function renderFitness() {
         recipeShelf.appendChild(
           el('div', { class: 'habit-row-item', style: { cursor: 'pointer' }, onClick: () => {
             if (!day.meals) day.meals = [];
-            day.meals.push({ title: r.title, calories: r.calories, protein: r.protein });
+            day.meals.push({ title: r.title, calories: r.calories, protein: r.protein, carbs: r.carbs || 0, fat: r.fat || 0 });
             day.calories = (day.calories || 0) + r.calories;
             day.protein = (day.protein || 0) + r.protein;
             queueSave();
@@ -2238,7 +3365,7 @@ function renderFitness() {
               el('span', {}, "🥗"),
               el('div', {},
                 el('span', { class: 'habit-title-text', style: { display: 'block' } }, r.title),
-                el('span', { style: { fontSize: '12px', color: 'var(--colors-muted)' } }, `${r.calories} kcal · ${r.protein}g protein`)
+                el('span', { style: { fontSize: '12px', color: 'var(--colors-muted)' } }, `${r.calories} kcal · P: ${r.protein}g · C: ${r.carbs || 0}g · F: ${r.fat || 0}g`)
               )
             ),
             el('span', { style: { fontSize: '12px', fontWeight: 'bold', color: 'var(--colors-primary)' } }, "+ ADD")
@@ -2258,6 +3385,12 @@ function renderFitness() {
           ),
           el('div', { class: 'form-group', style: { flex: '1 1 80px' } },
             el('input', { type: 'number', class: 'form-control', placeholder: 'protein (g)', id: 'new-recipe-prot', style: { height: '34px', fontSize: '13px' } })
+          ),
+          el('div', { class: 'form-group', style: { flex: '1 1 80px' } },
+            el('input', { type: 'number', class: 'form-control', placeholder: 'carbs (g)', id: 'new-recipe-carbs', style: { height: '34px', fontSize: '13px' } })
+          ),
+          el('div', { class: 'form-group', style: { flex: '1 1 80px' } },
+            el('input', { type: 'number', class: 'form-control', placeholder: 'fat (g)', id: 'new-recipe-fat', style: { height: '34px', fontSize: '13px' } })
           )
         ),
         el('button', {
@@ -2267,13 +3400,17 @@ function renderFitness() {
             const titleInput = document.getElementById('new-recipe-title');
             const calInput = document.getElementById('new-recipe-cal');
             const protInput = document.getElementById('new-recipe-prot');
+            const carbsInput = document.getElementById('new-recipe-carbs');
+            const fatInput = document.getElementById('new-recipe-fat');
             
             const title = titleInput ? titleInput.value.trim() : '';
             const calories = calInput ? parseInt(calInput.value) || 0 : 0;
             const protein = protInput ? parseInt(protInput.value) || 0 : 0;
+            const carbs = carbsInput ? parseInt(carbsInput.value) || 0 : 0;
+            const fat = fatInput ? parseInt(fatInput.value) || 0 : 0;
             
             if (title && calories > 0) {
-              state.recipes.push({ title, calories, protein });
+              state.recipes.push({ title, calories, protein, carbs, fat });
               saveLocalState();
               renderFitnessSubTab('nutrition');
             } else {
@@ -2285,6 +3422,7 @@ function renderFitness() {
 
       renderMealsList();
       activeContent.appendChild(progressCard);
+      activeContent.appendChild(aiLoggerCard);
       activeContent.appendChild(mealsList);
       activeContent.appendChild(recipeShelf);
       activeContent.appendChild(recipeBuilderCard);
@@ -2943,20 +4081,239 @@ function renderSettings() {
 
     subTabs.replaceChildren(
       el('button', { 
+        class: `segmented-btn ${tab === 'profile' ? 'active' : ''}`, 
+        onClick: () => renderSettingsSubView('profile') 
+      }, "User Profile"),
+      el('button', { 
         class: `segmented-btn ${tab === 'templates' ? 'active' : ''}`, 
         onClick: () => renderSettingsSubView('templates') 
       }, "Routines & Habits"),
-      el('button', { 
-        class: `segmented-btn ${tab === 'cloud_ai' ? 'active' : ''}`, 
-        onClick: () => renderSettingsSubView('cloud_ai') 
-      }, "Cloud & AI Connect"),
       el('button', { 
         class: `segmented-btn ${tab === 'system' ? 'active' : ''}`, 
         onClick: () => renderSettingsSubView('system') 
       }, "System Hub")
     );
 
-    if (tab === 'templates') {
+    if (tab === 'profile') {
+      const profile = state.profile || {
+        goal: 'maintain',
+        gender: 'male',
+        age: 30,
+        height: 175,
+        weight: 70,
+        goalWeight: 70,
+        activityLevel: 'moderate',
+        targetCalories: 2000,
+        targetProtein: 140,
+        targetWater: 8,
+        targetSteps: 10000,
+        targetSleep: 8
+      };
+
+      const profileCard = el('div', { class: 'form-card' },
+        el('h3', {}, "User Profile Parameters"),
+        el('p', { class: 'page-subtitle', style: { marginBottom: '16px' } }, "Configure your biometrics and daily targets. Daily scores, progress bars, and calendar ticks adapt to these metrics.")
+      );
+
+      const grid1 = el('div', { class: 'onboarding-field-row' },
+        el('div', { class: 'onboarding-field' },
+          el('label', {}, "Primary Goal"),
+          el('select', {
+            class: 'onboarding-select',
+            id: 'settings-profile-goal',
+            onChange: (e) => {
+              const goalVal = e.target.value;
+              const weightVal = parseFloat(document.getElementById('settings-profile-weight').value) || profile.weight;
+              const heightVal = parseFloat(document.getElementById('settings-profile-height').value) || profile.height;
+              const ageVal = parseInt(document.getElementById('settings-profile-age').value) || profile.age;
+              const genderVal = document.getElementById('settings-profile-gender').value || profile.gender;
+              const activityVal = document.getElementById('settings-profile-activity').value || profile.activityLevel;
+              
+              const calculated = recalcProfileTargets(goalVal, weightVal, heightVal, ageVal, genderVal, activityVal);
+              document.getElementById('settings-profile-calories').value = calculated.calories;
+              document.getElementById('settings-profile-protein').value = calculated.protein;
+            }
+          },
+            el('option', { value: 'lose', selected: profile.goal === 'lose' }, "Lose Body Fat"),
+            el('option', { value: 'maintain', selected: profile.goal === 'maintain' }, "Maintain Weight"),
+            el('option', { value: 'build', selected: profile.goal === 'build' }, "Build Muscle & Strength"),
+            el('option', { value: 'wellness', selected: profile.goal === 'wellness' }, "General Wellness")
+          )
+        ),
+        el('div', { class: 'onboarding-field' },
+          el('label', {}, "Biological Gender"),
+          el('select', {
+            class: 'onboarding-select',
+            id: 'settings-profile-gender'
+          },
+            el('option', { value: 'male', selected: profile.gender === 'male' }, "Male"),
+            el('option', { value: 'female', selected: profile.gender === 'female' }, "Female"),
+            el('option', { value: 'other', selected: profile.gender === 'other' }, "Other / Neutral")
+          )
+        )
+      );
+
+      const grid2 = el('div', { class: 'onboarding-field-row' },
+        el('div', { class: 'onboarding-field' },
+          el('label', {}, "Age (Years)"),
+          el('input', {
+            type: 'number',
+            class: 'onboarding-input',
+            id: 'settings-profile-age',
+            value: profile.age
+          })
+        ),
+        el('div', { class: 'onboarding-field' },
+          el('label', {}, "Height (cm)"),
+          el('input', {
+            type: 'number',
+            class: 'onboarding-input',
+            id: 'settings-profile-height',
+            value: profile.height
+          })
+        )
+      );
+
+      const grid3 = el('div', { class: 'onboarding-field-row' },
+        el('div', { class: 'onboarding-field' },
+          el('label', {}, "Current Weight (kg)"),
+          el('input', {
+            type: 'number',
+            class: 'onboarding-input',
+            id: 'settings-profile-weight',
+            value: profile.weight,
+            step: '0.1'
+          })
+        ),
+        el('div', { class: 'onboarding-field' },
+          el('label', {}, "Goal Weight (kg)"),
+          el('input', {
+            type: 'number',
+            class: 'onboarding-input',
+            id: 'settings-profile-goal-weight',
+            value: profile.goalWeight,
+            step: '0.1'
+          })
+        )
+      );
+
+      const grid4 = el('div', { class: 'onboarding-field-row' },
+        el('div', { class: 'onboarding-field' },
+          el('label', {}, "Lifestyle Activity"),
+          el('select', {
+            class: 'onboarding-select',
+            id: 'settings-profile-activity',
+            onChange: (e) => {
+              const activityVal = e.target.value;
+              const goalVal = document.getElementById('settings-profile-goal').value || profile.goal;
+              const weightVal = parseFloat(document.getElementById('settings-profile-weight').value) || profile.weight;
+              const heightVal = parseFloat(document.getElementById('settings-profile-height').value) || profile.height;
+              const ageVal = parseInt(document.getElementById('settings-profile-age').value) || profile.age;
+              const genderVal = document.getElementById('settings-profile-gender').value || profile.gender;
+              
+              const calculated = recalcProfileTargets(goalVal, weightVal, heightVal, ageVal, genderVal, activityVal);
+              document.getElementById('settings-profile-calories').value = calculated.calories;
+              document.getElementById('settings-profile-protein').value = calculated.protein;
+            }
+          },
+            el('option', { value: 'sedentary', selected: profile.activityLevel === 'sedentary' }, "Sedentary (No exercise)"),
+            el('option', { value: 'light', selected: profile.activityLevel === 'light' }, "Lightly Active (1-3 days/wk)"),
+            el('option', { value: 'moderate', selected: profile.activityLevel === 'moderate' }, "Moderately Active (3-5 days/wk)"),
+            el('option', { value: 'active', selected: profile.activityLevel === 'active' }, "Very Active (6-7 days/wk)")
+          )
+        )
+      );
+
+      const gridTargets = el('div', { class: 'onboarding-field-row', style: { borderTop: '1px dashed var(--colors-hairline)', paddingTop: '16px', marginTop: '16px' } },
+        el('div', { class: 'onboarding-field' },
+          el('label', {}, "Calorie Goal (kcal)"),
+          el('input', {
+            type: 'number',
+            class: 'onboarding-input',
+            id: 'settings-profile-calories',
+            value: profile.targetCalories
+          })
+        ),
+        el('div', { class: 'onboarding-field' },
+          el('label', {}, "Protein Goal (g)"),
+          el('input', {
+            type: 'number',
+            class: 'onboarding-input',
+            id: 'settings-profile-protein',
+            value: profile.targetProtein
+          })
+        )
+      );
+
+      const gridTargets2 = el('div', { class: 'onboarding-field-row' },
+        el('div', { class: 'onboarding-field' },
+          el('label', {}, "Water Goal (cups)"),
+          el('input', {
+            type: 'number',
+            class: 'onboarding-input',
+            id: 'settings-profile-water',
+            value: profile.targetWater
+          })
+        ),
+        el('div', { class: 'onboarding-field' },
+          el('label', {}, "Steps Goal"),
+          el('input', {
+            type: 'number',
+            class: 'onboarding-input',
+            id: 'settings-profile-steps',
+            value: profile.targetSteps
+          })
+        )
+      );
+
+      const saveBtn = el('button', {
+        class: 'btn btn-primary',
+        style: { width: 'fit-content', marginTop: '16px' },
+        onClick: () => {
+          const goal = document.getElementById('settings-profile-goal').value;
+          const gender = document.getElementById('settings-profile-gender').value;
+          const age = parseInt(document.getElementById('settings-profile-age').value) || profile.age;
+          const height = parseFloat(document.getElementById('settings-profile-height').value) || profile.height;
+          const weight = parseFloat(document.getElementById('settings-profile-weight').value) || profile.weight;
+          const goalWeight = parseFloat(document.getElementById('settings-profile-goal-weight').value) || profile.goalWeight;
+          const activityLevel = document.getElementById('settings-profile-activity').value;
+          const targetCalories = parseInt(document.getElementById('settings-profile-calories').value) || profile.targetCalories;
+          const targetProtein = parseInt(document.getElementById('settings-profile-protein').value) || profile.targetProtein;
+          const targetWater = parseInt(document.getElementById('settings-profile-water').value) || profile.targetWater;
+          const targetSteps = parseInt(document.getElementById('settings-profile-steps').value) || profile.targetSteps;
+
+          state.profile = {
+            goal, gender, age, height, weight, goalWeight, activityLevel,
+            targetCalories, targetProtein, targetWater, targetSteps,
+            targetSleep: profile.targetSleep || 8,
+            completedOnboarding: true
+          };
+
+          const todayLog = getTodayLog();
+          if (todayLog) {
+            todayLog.weight = weight;
+          }
+
+          saveLocalState();
+          if (state.user && firebase.db) {
+            saveUserPreferences();
+          }
+
+          alert("User Profile successfully saved.");
+          renderApp();
+        }
+      }, icon(ICONS.check), "Save Profile Parameters");
+
+      profileCard.appendChild(grid1);
+      profileCard.appendChild(grid2);
+      profileCard.appendChild(grid3);
+      profileCard.appendChild(grid4);
+      profileCard.appendChild(gridTargets);
+      profileCard.appendChild(gridTargets2);
+      profileCard.appendChild(saveBtn);
+      settingsContent.appendChild(profileCard);
+      
+    } else if (tab === 'templates') {
       // 1. WORKOUT SPLITS TEMPLATES
       const splitsCard = el('div', { class: 'form-card splits-configurator-card' },
         el('h3', {}, "Workout Splits Templates"),
@@ -3184,117 +4541,6 @@ function renderSettings() {
       settingsContent.appendChild(splitsCard);
       settingsContent.appendChild(habitsCard);
 
-    } else if (tab === 'cloud_ai') {
-      // 1. AUTHENTICATION CARD
-      const authCard = el('div', { class: 'form-card' },
-        el('h3', {}, "User Authentication"),
-        state.user 
-          ? el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-              el('div', {},
-                el('p', { style: { fontWeight: '700', color: 'var(--colors-ink)' } }, state.user.displayName || "Google User"),
-                el('p', { class: 'page-subtitle' }, state.user.email)
-              ),
-              el('button', {
-                class: 'btn btn-secondary',
-                onClick: async () => {
-                  await firebase.signOut(firebase.auth);
-                  state.user = null;
-                  window.location.reload();
-                }
-              }, "Sign Out")
-            )
-          : el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
-              el('p', { class: 'page-subtitle' }, "Currently in Local Sandbox mode. Authenticate to sync Firestore."),
-              el('button', {
-                class: 'btn btn-primary',
-                onClick: () => { window.location.hash = '#auth'; }
-              }, "Open Auth Portal")
-            )
-      );
-
-      // 2. FIREBASE CARD
-      const fbConfig = firebase.getFirebaseConfig();
-      const fbConfigured = firebase.isFirebaseConfigured();
-      
-      const firebaseCard = el('div', { class: `form-card settings-key-card ${fbConfigured ? 'configured' : ''}` },
-        el('h3', {}, "Firebase Database Settings"),
-        el('p', { class: 'page-subtitle' }, "Save your Google Firebase config to cloud-sync metrics."),
-        el('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
-          el('div', { class: 'form-group' },
-            el('span', { class: 'form-label' }, "API Key"),
-            el('input', { type: 'password', class: 'form-control', value: fbConfig.apiKey || '', id: 'settings-fb-key' })
-          ),
-          el('div', { class: 'form-group' },
-            el('span', { class: 'form-label' }, "Project ID"),
-            el('input', { type: 'text', class: 'form-control', value: fbConfig.projectId || '', id: 'settings-fb-pid' })
-          )
-        ),
-        el('button', {
-          class: 'btn btn-primary',
-          style: { width: 'fit-content', marginTop: '12px' },
-          onClick: () => {
-            const key = document.getElementById('settings-fb-key').value.trim();
-            const pid = document.getElementById('settings-fb-pid').value.trim();
-            if (key && pid) {
-              const config = {
-                apiKey: key,
-                projectId: pid,
-                authDomain: `${pid}.firebaseapp.com`,
-                storageBucket: `${pid}.appspot.com`,
-                messagingSenderId: "123456789",
-                appId: `1:${pid}:web:12345`
-              };
-              firebase.saveFirebaseConfig(config);
-              alert("Firebase credentials configured. App will reload to sync.");
-              firebase.reinitializeFirebase();
-            } else {
-              firebase.saveFirebaseConfig(null);
-              alert("Firebase config cleared. Sandbox fallback active.");
-              window.location.reload();
-            }
-          }
-        }, fbConfigured ? "Update Config" : "Save Credentials")
-      );
-
-      // 3. GEMINI CARD
-      const geminiKey = gemini.getGeminiKey();
-      const geminiConfigured = !!geminiKey;
-
-      const geminiCard = el('div', { class: `form-card settings-key-card ${geminiConfigured ? 'configured' : ''}` },
-        el('h3', {}, "Gemini AI Engine Key"),
-        el('p', { class: 'page-subtitle' }, "Input your Gemini API key to enable direct AI health coaching feedback on the Dashboard. Get your key free at Google AI Studio."),
-        el('div', { class: 'form-group' },
-          el('span', { class: 'form-label' }, "API Key"),
-          el('input', { 
-            type: 'password', 
-            class: 'form-control', 
-            value: geminiKey || '', 
-            id: 'settings-gemini-key',
-            placeholder: geminiConfigured ? '••••••••••••••••••••••••••••••••••••' : 'AIzaSy...'
-          })
-        ),
-        el('button', {
-          class: 'btn btn-primary',
-          style: { width: 'fit-content', marginTop: '12px' },
-          onClick: () => {
-            const keyVal = document.getElementById('settings-gemini-key').value.trim();
-            if (keyVal) {
-              gemini.saveGeminiKey(keyVal);
-              alert("Gemini key saved securely (obfuscated against browser memory extraction).");
-              window.location.reload();
-            } else {
-              gemini.saveGeminiKey('');
-              alert("Gemini API key cleared.");
-              window.location.reload();
-            }
-          }
-        }, geminiConfigured ? "Update AI Key" : "Save AI Key")
-      );
-
-      settingsContent.appendChild(authCard);
-      settingsContent.appendChild(firebaseCard);
-      settingsContent.appendChild(geminiCard);
-
     } else if (tab === 'system') {
       // Diagnostics tiles
       const habitsList = getHabitDefinitions();
@@ -3339,6 +4585,254 @@ function renderSettings() {
         )
       );
 
+      // 1. AUTHENTICATION CARD
+      const authCard = el('div', { class: 'form-card' },
+        el('h3', {}, "User Authentication"),
+        state.user 
+          ? el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+              el('div', {},
+                el('p', { style: { fontWeight: '700', color: 'var(--colors-ink)' } }, state.user.displayName || "Google User"),
+                el('p', { class: 'page-subtitle' }, state.user.email)
+              ),
+              el('button', {
+                class: 'btn btn-secondary',
+                onClick: async () => {
+                  await firebase.signOut(firebase.auth);
+                  state.user = null;
+                  window.location.reload();
+                }
+              }, "Sign Out")
+            )
+          : el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+              el('p', { class: 'page-subtitle' }, "Currently in Local Sandbox mode. Authenticate to sync Firestore."),
+              el('button', {
+                class: 'btn btn-primary',
+                onClick: () => { window.location.hash = '#auth'; }
+              }, "Open Auth Portal")
+            )
+      );
+
+      // 3. GEMINI CARD
+      const geminiKey = gemini.getGeminiKey();
+      const geminiConfigured = !!geminiKey;
+
+      const geminiCard = el('div', { class: `form-card settings-key-card ${geminiConfigured ? 'configured' : ''}` },
+        el('h3', {}, "Gemini AI Engine Key"),
+        el('p', { class: 'page-subtitle' }, "Input your Gemini API key to enable direct AI health coaching feedback on the Dashboard. Get your key free at Google AI Studio."),
+        el('div', { class: 'form-group' },
+          el('span', { class: 'form-label' }, "API Key"),
+          el('input', { 
+            type: 'password', 
+            class: 'form-control', 
+            value: geminiKey || '', 
+            id: 'settings-gemini-key',
+            placeholder: geminiConfigured ? '••••••••••••••••••••••••••••••••••••' : 'AIzaSy...'
+          })
+        ),
+        el('button', {
+          class: 'btn btn-primary',
+          style: { width: 'fit-content', marginTop: '12px' },
+          onClick: () => {
+            const keyVal = document.getElementById('settings-gemini-key').value.trim();
+            if (keyVal) {
+              gemini.saveGeminiKey(keyVal);
+              alert("Gemini key saved securely (obfuscated against browser memory extraction).");
+              window.location.reload();
+            } else {
+              gemini.saveGeminiKey('');
+              alert("Gemini API key cleared.");
+              window.location.reload();
+            }
+          }
+        }, geminiConfigured ? "Update AI Key" : "Save AI Key")
+      );
+
+      // 4. AI COACH SETTINGS CARD
+      const currentPersonality = localStorage.getItem('lt_coach_personality') || 'elite';
+      const coachSettingsCard = el('div', { class: 'form-card', style: { marginTop: '24px' } },
+        el('h3', {}, "AI Coach Personality Settings"),
+        el('p', { class: 'page-subtitle' }, "Configure the feedback style and tone of Coach Gemini to align with your personal habits and fitness philosophy."),
+        el('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '16px' } },
+          el('div', { class: 'personality-chips-grid', style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' } },
+            [
+              { id: 'elite', label: 'Elite Performance', icon: '🏆', desc: 'Objective, evidence-driven, no-nonsense.' },
+              { id: 'supportive', label: 'Supportive Mentor', icon: '🌱', desc: 'Warm, encouraging, positive reinforcement.' },
+              { id: 'hardcore', label: 'Drill Sergeant', icon: '🔥', desc: 'High energy, raw, absolute accountability.' },
+              { id: 'mindfulness', label: 'Mindful Balance', icon: '🧘', desc: 'Recovery focus, sleep, stress management.' }
+            ].map(p => {
+              const active = currentPersonality === p.id;
+              return el('button', {
+                class: `segmented-btn ${active ? 'active' : ''}`,
+                style: {
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  padding: '16px',
+                  borderRadius: 'var(--rounded-lg)',
+                  border: active ? '2px solid var(--colors-primary)' : '1px solid var(--colors-hairline)',
+                  background: active ? 'rgba(156, 101, 24, 0.08)' : 'var(--colors-canvas)',
+                  textAlign: 'left',
+                  height: 'auto',
+                  gap: '6px'
+                },
+                onClick: () => {
+                  localStorage.setItem('lt_coach_personality', p.id);
+                  alert(`AI Coach personality set to: ${p.label}`);
+                  renderSettingsSubView('system');
+                }
+              },
+                el('span', { style: { fontSize: '20px', marginBottom: '2px' } }, p.icon),
+                el('span', { style: { fontWeight: '700', fontSize: '13.5px', color: 'var(--colors-ink)', display: 'block' } }, p.label),
+                el('span', { style: { fontSize: '11px', color: 'var(--colors-muted)', lineHeight: '1.3' } }, p.desc)
+              );
+            })
+          )
+        )
+      );
+
+      // 5. APPLE HEALTH INTEGRATION CARD
+      const fbConfigured = firebase.isFirebaseConfigured();
+      const fbConfig = firebase.getFirebaseConfig();
+      const signedIn = !!state.user;
+      let healthSyncCard;
+      if (!fbConfigured || !signedIn) {
+        healthSyncCard = el('div', { class: 'form-card health-sync-card', style: { marginTop: '24px' } },
+          el('h3', {}, " Apple Health Integration"),
+          el('p', { class: 'page-subtitle' }, "Configure a secure, automatic sync from your iPhone using Apple Shortcuts."),
+          el('div', { 
+            style: { 
+              padding: '16px', 
+              borderRadius: 'var(--rounded-lg)', 
+              background: 'rgba(232, 165, 90, 0.08)', 
+              border: '1px solid rgba(232, 165, 90, 0.2)',
+              marginTop: '12px',
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'center'
+            } 
+          },
+            el('span', { style: { fontSize: '20px' } }, "⚠️"),
+            el('span', { style: { fontSize: '13px', color: 'var(--colors-ink)', fontWeight: '500' } }, 
+              "Firebase database and authentication must be configured and active to access Apple Health REST webhook setup details."
+            )
+          )
+        );
+      } else {
+        const patchUrl = `https://firestore.googleapis.com/v1/projects/${fbConfig.projectId}/databases/(default)/documents/users/${state.user.uid}/dailyLogs/YYYY-MM-DD?updateMask.fieldPaths=steps&updateMask.fieldPaths=sleep&updateMask.fieldPaths=activeBurn`;
+        const authUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${fbConfig.apiKey}`;
+        const authPayloadPlaceholder = JSON.stringify({ email: "your-email@domain.com", password: "your-password", returnSecureToken: true }, null, 2);
+        const patchPayloadPlaceholder = JSON.stringify({
+          fields: {
+            steps: { integerValue: 10500 },
+            sleep: { doubleValue: 7.5 },
+            activeBurn: { integerValue: 420 }
+          }
+        }, null, 2);
+
+        healthSyncCard = el('div', { class: 'form-card health-sync-card', style: { marginTop: '24px' } },
+          el('h3', {}, " Apple Health Integration"),
+          el('p', { class: 'page-subtitle' }, "Synchronize steps, sleep, and active energy burn automatically from your iPhone using the built-in iOS Shortcuts app. Completely free, secure, and offline-compatible."),
+          
+          el('div', { class: 'settings-split-wrapper', style: { display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '12px' } },
+            el('div', {},
+              el('h4', { style: { fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: '700', color: 'var(--colors-ink)', marginBottom: '8px' } }, "Step 1: Enable Email & Password in Firebase"),
+              el('p', { style: { fontSize: '13px', color: 'var(--colors-muted)', lineHeight: '1.4' } }, 
+                "Go to your Firebase Console -> Authentication -> Sign-in Method, and enable the Email/Password provider. Create a sync user account (or use your own email/password if linked)."
+              )
+            ),
+
+            el('div', {},
+              el('h4', { style: { fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: '700', color: 'var(--colors-ink)', marginBottom: '8px' } }, "Step 2: Get iOS Shortcut Template"),
+              el('p', { style: { fontSize: '13px', color: 'var(--colors-muted)', lineHeight: '1.4', marginBottom: '8px' } }, 
+                "Open this link on your iPhone to download the customized Apple Shortcut template:"
+              ),
+              el('a', {
+                href: 'https://www.icloud.com/shortcuts/d8544cb4422e48de9a9f24c3df40d393',
+                target: '_blank',
+                class: 'btn btn-secondary',
+                style: { width: 'fit-content', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px' }
+              }, icon(ICONS.sparkles), "Get Life Sync Shortcut")
+            ),
+
+            el('div', {},
+              el('h4', { style: { fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: '700', color: 'var(--colors-ink)', marginBottom: '8px' } }, "Step 3: Setup iOS Automation Triggers"),
+              el('p', { style: { fontSize: '13px', color: 'var(--colors-muted)', lineHeight: '1.4' } }, 
+                "Inside the iOS Shortcuts app, navigate to Automation -> Create Personal Automation. Trigger when you close an app (e.g. Messages, Mail, Safari) to sync 20-50 times a day in the background for free. Select the imported 'Life Sync' shortcut as the action."
+              )
+            ),
+
+            el('div', { style: { borderTop: '1px solid var(--colors-hairline)', paddingTop: '20px' } },
+              el('h4', { style: { fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: '700', color: 'var(--colors-ink)', marginBottom: '12px' } }, "Step 4: Webhook Configuration Keys"),
+              
+              el('div', { style: { display: 'flex', flexDirection: 'column', gap: '12px' } },
+                el('div', { class: 'form-group' },
+                  el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                    el('span', { class: 'form-label' }, "1. Authentication REST Endpoint"),
+                    el('button', { 
+                      class: 'btn btn-text copy-btn', 
+                      style: { fontSize: '11px', padding: '2px 8px' },
+                      onClick: () => {
+                        navigator.clipboard.writeText(authUrl);
+                        alert("Authentication URL copied!");
+                      }
+                    }, "Copy")
+                  ),
+                  el('div', { class: 'health-sync-code-box' }, authUrl)
+                ),
+
+                el('div', { class: 'form-group' },
+                  el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                    el('span', { class: 'form-label' }, "2. Auth Payload Placeholder"),
+                    el('button', { 
+                      class: 'btn btn-text copy-btn', 
+                      style: { fontSize: '11px', padding: '2px 8px' },
+                      onClick: () => {
+                        navigator.clipboard.writeText(authPayloadPlaceholder);
+                        alert("Auth Payload copied!");
+                      }
+                    }, "Copy")
+                  ),
+                  el('pre', { class: 'health-sync-code-box', style: { whiteSpace: 'pre-wrap' } }, authPayloadPlaceholder)
+                ),
+
+                el('div', { class: 'form-group' },
+                  el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                    el('span', { class: 'form-label' }, "3. Firestore PATCH Endpoint"),
+                    el('button', { 
+                      class: 'btn btn-text copy-btn', 
+                      style: { fontSize: '11px', padding: '2px 8px' },
+                      onClick: () => {
+                        navigator.clipboard.writeText(patchUrl);
+                        alert("PATCH Endpoint copied!");
+                      }
+                    }, "Copy")
+                  ),
+                  el('div', { class: 'health-sync-code-box' }, patchUrl),
+                  el('span', { style: { fontSize: '11px', color: 'var(--colors-muted)', marginTop: '4px' } }, 
+                    "Note: Replace YYYY-MM-DD in the URL dynamically with the current date using the Shortcut Date Formatting block (Format: yyyy-MM-dd)."
+                  )
+                ),
+
+                el('div', { class: 'form-group' },
+                  el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                    el('span', { class: 'form-label' }, "4. Firestore JSON Payload Template"),
+                    el('button', { 
+                      class: 'btn btn-text copy-btn', 
+                      style: { fontSize: '11px', padding: '2px 8px' },
+                      onClick: () => {
+                        navigator.clipboard.writeText(patchPayloadPlaceholder);
+                        alert("Payload Template copied!");
+                      }
+                    }, "Copy")
+                  ),
+                  el('pre', { class: 'health-sync-code-box', style: { whiteSpace: 'pre-wrap' } }, patchPayloadPlaceholder)
+                )
+              )
+            )
+          )
+        );
+      }
+
       // Danger card
       const dangerCard = el('div', { class: 'form-card', style: { borderLeft: '4px solid var(--colors-error)' } },
         el('h3', { style: { color: 'var(--colors-error)' } }, "System Maintenance"),
@@ -3361,6 +4855,10 @@ function renderSettings() {
       );
 
       settingsContent.appendChild(diagnosticsGrid);
+      settingsContent.appendChild(authCard);
+      settingsContent.appendChild(geminiCard);
+      settingsContent.appendChild(coachSettingsCard);
+      if (healthSyncCard) settingsContent.appendChild(healthSyncCard);
       settingsContent.appendChild(dangerCard);
     }
   };

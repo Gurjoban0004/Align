@@ -28,42 +28,26 @@ import {
   deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-// Check if a custom Firebase configuration is stored in LocalStorage
 export function getFirebaseConfig() {
-  const stored = localStorage.getItem('firebase_config');
-  if (stored) {
-    try {
-      return JSON.parse(stored);
-    } catch (e) {
-      console.error("Invalid stored Firebase config:", e);
-    }
-  }
-  
-  // Default fallback placeholders (Users can override in Settings)
   return {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyBX2AsGr8I2C0cgNTyoWEC9B-L4uu1SIAE",
+    authDomain: "align-50edf.firebaseapp.com",
+    projectId: "align-50edf",
+    storageBucket: "align-50edf.firebasestorage.app",
+    messagingSenderId: "478516175608",
+    appId: "1:478516175608:web:63a460c0da88fdab10910d"
   };
 }
 
 export function saveFirebaseConfig(config) {
-  if (config && config.apiKey && config.projectId) {
-    localStorage.setItem('firebase_config', JSON.stringify(config));
-    return true;
-  } else {
-    localStorage.removeItem('firebase_config');
-    return false;
-  }
+  // Disabled in production (config is hardcoded in firebase-config.js)
+  return false;
 }
 
 // Check if Firebase is configured with real credentials
 export function isFirebaseConfigured() {
   const config = getFirebaseConfig();
-  return config && config.apiKey && config.apiKey !== "YOUR_API_KEY";
+  return config && config.apiKey && config.apiKey !== "YOUR_PRODUCTION_API_KEY" && config.apiKey !== "YOUR_API_KEY";
 }
 
 let app;
