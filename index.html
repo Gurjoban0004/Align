@@ -5,43 +5,49 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   
   <!-- SEO & Metadata -->
-  <title>Life Tracker PWA - Daily Fitness, Habits & Media Journal</title>
-  <meta name="description" content="An elegant, editorial-style journal to log your workouts, steps, daily calories, habits, books, and movies with secure Google Sign-in sync and Gemini AI coaching insights.">
+  <title>Premium Life Tracker Redesign</title>
+  <meta name="description" content="A gorgeous, premium, editorial-style dashboard to track your habits, workouts, steps, sleep, water, and reading logs.">
   
-  <!-- PWA & Apple Web App Settings -->
+  <!-- PWA Settings -->
   <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#cc785c">
+  <meta name="theme-color" content="#1a3020">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Life Tracker">
+  <meta name="apple-mobile-web-app-title" content="Tracker Redesign">
   <link rel="apple-touch-icon" href="logo.svg">
   
-  <!-- Stylesheet -->
-  <link rel="stylesheet" href="index.css?v=3">
+  <!-- Google Fonts: Outfit & Cormorant Garamond -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- Redesigned Stylesheet -->
+  <link rel="stylesheet" href="redesign.css">
 </head>
 <body>
 
   <div id="app-shell">
     
-    <!-- Desktop Top Navigation Header -->
+    <!-- Desktop Header Top Nav -->
     <header class="top-nav" id="desktop-header">
       <div class="nav-container">
         <a href="#dashboard" class="brand">
-          <svg class="brand-icon" viewBox="0 0 100 100" width="24" height="24">
-            <circle cx="50" cy="50" r="8" fill="#cc785c" />
-            <rect x="20" y="44" width="60" height="12" rx="6" fill="#cc785c" />
-            <rect x="44" y="20" width="12" height="60" rx="6" fill="#cc785c" />
-          </svg>
-          Life Tracker
+          <div class="brand-icon-wrapper">
+            <svg class="brand-icon" viewBox="0 0 100 100" width="22" height="22">
+              <circle cx="50" cy="50" r="10" fill="currentColor" />
+              <rect x="22" y="44" width="56" height="12" rx="6" fill="currentColor" />
+              <rect x="44" y="22" width="12" height="56" rx="6" fill="currentColor" />
+            </svg>
+          </div>
+          <span>Life Tracker</span>
         </a>
         
         <div class="desktop-menu">
-          <!-- Sync status indicator -->
-          <span id="sync-status-indicator" style="display: none; font-size: 12px; font-weight: 500; font-family: var(--font-sans);"></span>
+          <span id="sync-status-indicator" style="display: none;"></span>
 
-          <!-- Central Custom Date Picker -->
-          <div class="custom-date-container" style="margin-right: 16px;">
-            <span id="desktop-date-label">June 5th, 2026</span>
+          <!-- Central Custom Date Selector Label -->
+          <div class="custom-date-container">
+            <span id="desktop-date-label">June 6th, 2026</span>
             <input type="date" id="global-date-picker">
           </div>
           
@@ -54,25 +60,24 @@
       </div>
     </header>
 
-    <!-- Main View Target for Javascript Rendering -->
-    <main id="view-target" style="flex-grow: 1;">
-      <!-- JavaScript will dynamically clear and inject views here -->
-      <div style="display: flex; height: 80vh; justify-content: center; align-items: center; background-color: var(--colors-canvas);">
-        <p style="font-family: var(--font-display); font-size: 24px; color: var(--colors-muted);">Initializing tracking canvas...</p>
+    <!-- Main Rendering Area -->
+    <main id="view-target">
+      <div class="initializing-screen">
+        <p>Sketching tracker canvas...</p>
       </div>
     </main>
 
-    <!-- Mobile Bottom Navigation Bar (Sticky) -->
+    <!-- Mobile Sticky Bottom Nav -->
     <nav class="bottom-nav" id="mobile-nav-bar">
       <a href="#dashboard" class="bottom-nav-item" data-view="dashboard" id="mob-btn-dashboard">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
           <polyline points="9 22 9 12 15 12 15 22"></polyline>
         </svg>
         <span>Digest</span>
       </a>
       <a href="#fitness" class="bottom-nav-item" data-view="fitness" id="mob-btn-fitness">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
           <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
           <line x1="6" y1="1" x2="6" y2="4"></line>
@@ -82,14 +87,14 @@
         <span>Fitness</span>
       </a>
       <a href="#habits" class="bottom-nav-item" data-view="habits" id="mob-btn-habits">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="9 11 12 14 22 4"></polyline>
           <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
         </svg>
         <span>Habits</span>
       </a>
       <a href="#media" class="bottom-nav-item" data-view="media" id="mob-btn-media">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
           <path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20"></path>
           <path d="M4 19.5V3.5A2.5 2.5 0 0 1 6.5 1H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5z"></path>
@@ -97,7 +102,7 @@
         <span>Media</span>
       </a>
       <a href="#settings" class="bottom-nav-item" data-view="settings" id="mob-btn-settings">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"></circle>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
         </svg>
@@ -107,7 +112,7 @@
     
   </div>
 
-  <!-- Main ES Module JS imports -->
-  <script type="module" src="app.js"></script>
+  <!-- Main ES Module JS Redesign Prototype -->
+  <script type="module" src="redesign.js"></script>
 </body>
 </html>
