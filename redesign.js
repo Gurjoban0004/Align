@@ -2765,7 +2765,6 @@ function renderDashboard() {
     renderCoachAndTrendsSubView();
 
     // Trends details grid
-    const trends = getWeeklyTrends(state.dateStr);
     const trendSign = trends.weightChange7d > 0 ? '+' : '';
     
     // Calculate weight status values
