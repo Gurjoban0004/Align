@@ -1173,9 +1173,11 @@ function setupFirestoreSync(user) {
       renderApp();
     } else {
       saveUserPreferences();
+      renderApp();
     }
   }, (err) => {
     console.error("Firestore user preferences sync error:", err);
+    renderApp();
   });
 
   setupFirestoreLogSync(user, state.dateStr);
@@ -4878,6 +4880,7 @@ function initApp() {
     firebase.onAuthStateChanged(firebase.auth, (user) => {
       if (user) {
         state.user = user;
+        renderApp();
         setupFirestoreSync(user);
       } else {
         state.user = null;
