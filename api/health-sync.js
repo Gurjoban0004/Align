@@ -36,8 +36,8 @@ export default async function handler(req, res) {
 
   try {
     const syncToken = req.body.syncToken || req.body.SyncToken;
-    const date = req.body.date || req.body.Date;
-    const rawSteps = req.body.steps || req.body.Steps;
+    let date = req.body.date || req.body.Date;
+    const rawSteps = req.body.steps || req.body.Steps || req.body.Number; // Fallback if they left the default 'Number' key
     const rawSleep = req.body.sleep || req.body.Sleep;
     const rawActiveBurn = req.body.activeBurn || req.body.ActiveBurn || req.body.activeburn;
 
@@ -46,6 +46,14 @@ export default async function handler(req, res) {
     }
     if (!date) {
       return res.status(400).json({ error: 'Bad Request: Missing date (YYYY-MM-DD)' });
+    }
+
+    // Auto-fix Apple's messy localized date strings (e.g. "08/06/26, 12:00 PM")
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      const d = new Date();
+      d.setHours(d.getHours() + 5);
+      d.setMinutes(d.getMinutes() + 30); // Approximate IST timezone
+      date = d.toISOString().split('T')[0];
     }
 
     const db = admin.firestore();
