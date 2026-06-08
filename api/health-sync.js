@@ -35,7 +35,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { syncToken, date, steps, sleep, activeBurn } = req.body;
+    const syncToken = req.body.syncToken || req.body.SyncToken;
+    const date = req.body.date || req.body.Date;
+    const rawSteps = req.body.steps || req.body.Steps;
+    const rawSleep = req.body.sleep || req.body.Sleep;
+    const rawActiveBurn = req.body.activeBurn || req.body.ActiveBurn || req.body.activeburn;
 
     if (!syncToken) {
       return res.status(401).json({ error: 'Unauthorized: Missing syncToken' });
@@ -46,7 +50,6 @@ export default async function handler(req, res) {
 
     const db = admin.firestore();
     
-    // Find the user with this syncToken
     const usersSnapshot = await db.collection('users')
       .where('profile.syncToken', '==', syncToken)
       .limit(1)
@@ -57,14 +60,30 @@ export default async function handler(req, res) {
     }
 
     const userId = usersSnapshot.docs[0].id;
-
-    // Update the user's daily log
     const logRef = db.collection('users').doc(userId).collection('dailyLogs').doc(date);
     
     const updateData = {};
-    if (steps !== undefined && steps !== null) updateData.steps = parseInt(steps, 10);
-    if (sleep !== undefined && sleep !== null) updateData.sleep = parseFloat(sleep);
-    if (activeBurn !== undefined && activeBurn !== null) updateData.activeBurn = parseInt(activeBurn, 10);
+
+    const parseNum = (val) => {
+      if (val === undefined || val === null || val === '') return null;
+      if (typeof val === 'number') return val;
+      const cleaned = String(val).replace(/,/g, '');
+      const parsed = parseFloat(cleaned);
+      return isNaN(parsed) ? null : parsed;
+    };
+
+    const parsedSteps = parseNum(rawSteps);
+    if (parsedSteps !== null) updateData.steps = Math.round(parsedSteps);
+
+    const parsedSleep = parseNum(rawSleep);
+    if (parsedSleep !== null) updateData.sleep = parsedSleep;
+
+    const parsedBurn = parseNum(rawActiveBurn);
+    if (parsedBurn !== null) updateData.activeBurn = Math.round(parsedBurn);
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: 'Bad Request: No valid health data (steps, sleep, activeBurn) provided.' });
+    }
 
     // Merge true ensures we don't overwrite other data like recipes/notes
     await logRef.set(updateData, { merge: true });
