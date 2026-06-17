@@ -2,7 +2,7 @@
 // ALIGN v2 — Service Worker
 // =============================================================
 
-const CACHE_VERSION = 'align-v2-2';
+const CACHE_VERSION = 'align-v2-3';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
 const MAX_DYNAMIC = 60;
