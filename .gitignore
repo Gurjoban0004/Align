@@ -2,13 +2,25 @@
 .DS_Store
 Thumbs.db
 
-# Credentials
+# Credentials & secrets — NEVER commit these
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
 firebase-api-keys.txt
+*-firebase-adminsdk-*.json
+*-service-account*.json
+scratch_test.js
 
 # Local server files
 server.log
+
+# Health sync runtime data (contains personal health data + tokens)
+v2/data/
+
+# Scratch / temp files
+scratch/
+
+# Node modules
+node_modules/
