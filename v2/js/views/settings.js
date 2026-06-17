@@ -181,78 +181,116 @@ export function renderSettings(container) {
 
   wrap.appendChild(healthSection);
 
-  // ─── Cloud Sync / Firebase Setup ───
+  // ─── Cloud Sync / Google Account Sync ───
   const cloudSection = el('div', { class: 'settings-section' });
   cloudSection.appendChild(el('h4', { class: 'settings-section-title' }, '☁️ Cloud Sync'));
 
-  const storedFbConfig = (() => {
-    try { return JSON.parse(localStorage.getItem('align_v2_firebase_config') || 'null'); } catch (e) { return null; }
-  })();
-  const fbConfigured = !!(storedFbConfig?.apiKey && storedFbConfig?.projectId);
+  if (user) {
+    // Status row (connected)
+    const fbStatusDot = el('span', { class: 'health-status-dot connected' });
+    const fbStatusText = el('span', { class: 'health-status-label' }, 'Sync Connected');
+    cloudSection.appendChild(el('div', { class: 'health-status-row', style: { marginBottom: 'var(--space-3)' } },
+      el('div', { class: 'health-status-indicator' }, fbStatusDot, fbStatusText),
+      el('span', { class: 'caption', style: { color: 'var(--text-subtle)' } }, 'Sync active ✓')
+    ));
 
-  // Status row
-  const fbStatusDot = el('span', { class: `health-status-dot ${fbConfigured ? 'connected' : 'disconnected'}` });
-  const fbStatusText = el('span', { class: 'health-status-label' }, fbConfigured ? `Connected — ${storedFbConfig.projectId}` : 'Not configured');
-  cloudSection.appendChild(el('div', { class: 'health-status-row' },
-    el('div', { class: 'health-status-indicator' }, fbStatusDot, fbStatusText),
-    el('span', { class: 'caption', style: { color: 'var(--text-subtle)' } }, fbConfigured ? 'Firebase ✓' : 'Local only')
-  ));
+    // Profile card
+    const avatarImg = user.photoURL 
+      ? el('img', { 
+          src: user.photoURL, 
+          alt: 'Avatar', 
+          style: { 
+            width: '36px', 
+            height: '36px', 
+            borderRadius: '50%', 
+            marginRight: 'var(--space-3)',
+            border: '2px solid var(--accent-coral, #cc785c)'
+          } 
+        })
+      : el('span', { 
+          style: { 
+            width: '36px', 
+            height: '36px', 
+            borderRadius: '50%', 
+            backgroundColor: 'var(--surface-soft)', 
+            display: 'inline-flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            marginRight: 'var(--space-3)',
+            color: 'var(--accent-coral, #cc785c)'
+          } 
+        }, icon(ICONS.user, { size: 20 }));
 
-  // Paste config button
-  cloudSection.appendChild(el('button', {
-    class: 'btn btn-secondary',
-    style: { width: '100%', marginBottom: 'var(--space-2)' },
-    onClick: () => editFirebaseConfig(container),
-  }, fbConfigured ? '✏️ Edit Firebase Config' : '🔗 Connect Firebase Project'));
+    const profileDetails = el('div', { style: { display: 'flex', flexDirection: 'column' } },
+      el('span', { style: { fontWeight: '600', color: 'var(--ink)' } }, user.displayName || 'Google Account'),
+      el('span', { class: 'caption', style: { color: 'var(--text-subtle)' } }, user.email)
+    );
 
-  // Setup guide
-  cloudSection.appendChild(el('div', { class: 'health-setup-guide' },
-    el('p', { class: 'caption' }, '1. Go to ', el('strong', {}, 'console.firebase.google.com'), ' → Create project'),
-    el('p', { class: 'caption' }, '2. Add a Web App → copy the firebaseConfig object'),
-    el('p', { class: 'caption' }, '3. Paste it here → enables Google Sign-In + cross-device sync'),
-    el('p', { class: 'caption', style: { color: 'var(--text-subtle)', fontStyle: 'italic' } },
-      'Without Firebase, the app works fully on-device only.'
-    )
-  ));
+    cloudSection.appendChild(el('div', { 
+      style: { 
+        display: 'flex', 
+        alignItems: 'center', 
+        padding: 'var(--space-3)', 
+        background: 'var(--surface-soft)', 
+        borderRadius: 'var(--radius-md)',
+        marginBottom: 'var(--space-3)'
+      } 
+    }, avatarImg, profileDetails));
 
-  // Google sign-in (only shown when Firebase is configured)
-  if (fbConfigured) {
-    if (user) {
-      cloudSection.appendChild(createSettingRow('Signed in as', user.email || user.displayName || 'Google Account', null));
-      cloudSection.appendChild(el('button', {
-        class: 'btn btn-secondary',
-        style: { width: '100%', marginTop: 'var(--space-3)' },
-        onClick: async () => {
-          try {
-            await signOut(auth);
-            setState('user', null);
-            showToast('Signed out', { type: 'info' });
-            container.replaceChildren();
-            renderSettings(container);
-          } catch (e) {
-            showToast('Sign out failed', { type: 'error' });
-          }
-        },
-      }, icon(ICONS.logOut, { size: 16 }), 'Sign Out'));
-    } else {
-      cloudSection.appendChild(el('button', {
-        class: 'btn btn-primary',
-        style: { width: '100%', marginTop: 'var(--space-3)' },
-        onClick: async () => {
-          try {
-            const provider = new GoogleAuthProvider();
-            const result = await signInWithPopup(auth, provider);
-            setState('user', result.user);
-            showToast(`Welcome, ${result.user.displayName || 'User'}!`, { type: 'success' });
-            container.replaceChildren();
-            renderSettings(container);
-          } catch (e) {
-            console.error('Sign in failed:', e);
-            showToast('Sign in failed — check your Firebase config', { type: 'error' });
-          }
-        },
-      }, icon(ICONS.logIn, { size: 16 }), 'Sign in with Google'));
-    }
+    // Sign out button
+    cloudSection.appendChild(el('button', {
+      class: 'btn btn-secondary',
+      style: { width: '100%', marginTop: 'var(--space-2)' },
+      onClick: async () => {
+        try {
+          await signOut(auth);
+          setState('user', null);
+          showToast('Signed out', { type: 'info' });
+          setTimeout(() => window.location.reload(), 500);
+        } catch (e) {
+          showToast('Sign out failed', { type: 'error' });
+        }
+      },
+    }, icon(ICONS.logOut, { size: 16 }), ' Sign Out'));
+  } else {
+    // Status row (disconnected)
+    const fbStatusDot = el('span', { class: 'health-status-dot disconnected' });
+    const fbStatusText = el('span', { class: 'health-status-label' }, 'Not Connected');
+    cloudSection.appendChild(el('div', { class: 'health-status-row', style: { marginBottom: 'var(--space-3)' } },
+      el('div', { class: 'health-status-indicator' }, fbStatusDot, fbStatusText),
+      el('span', { class: 'caption', style: { color: 'var(--text-subtle)' } }, 'Local only')
+    ));
+
+    // Explainer text
+    cloudSection.appendChild(el('div', { class: 'health-setup-guide', style: { marginBottom: 'var(--space-3)' } },
+      el('p', { class: 'caption' }, 'Sign in with your Google account to automatically sync your profile, logs, and routines across devices.')
+    ));
+
+    // Sign in button
+    const signInBtn = el('button', {
+      class: 'btn btn-primary',
+      style: { width: '100%' },
+      onClick: async () => {
+        signInBtn.disabled = true;
+        signInBtn.replaceChildren(el('span', { class: 'spinner' }), ' Connecting...');
+        try {
+          const provider = new GoogleAuthProvider();
+          const result = await signInWithPopup(auth, provider);
+          setState('user', result.user);
+          showToast(`Welcome, ${result.user.displayName || 'User'}!`, { type: 'success' });
+          container.replaceChildren();
+          renderSettings(container);
+        } catch (e) {
+          console.error('Sign in failed:', e);
+          showToast('Sign in failed — try again', { type: 'error' });
+        } finally {
+          signInBtn.disabled = false;
+          signInBtn.replaceChildren(icon(ICONS.logIn, { size: 16 }), ' Sign in with Google');
+        }
+      },
+    }, icon(ICONS.logIn, { size: 16 }), ' Sign in with Google');
+    
+    cloudSection.appendChild(signInBtn);
   }
 
   wrap.appendChild(cloudSection);
@@ -411,107 +449,7 @@ function editKeyField(label, stateKey, currentValue, container) {
   });
 }
 
-function editFirebaseConfig(container) {
-  const existing = (() => {
-    try { return localStorage.getItem('align_v2_firebase_config') || ''; } catch (e) { return ''; }
-  })();
 
-  const sheet = showBottomSheet({
-    title: '☁️ Firebase Config',
-    render: (content) => {
-      // Instructions
-      content.appendChild(el('p', {
-        class: 'caption',
-        style: { color: 'var(--text-muted)', marginBottom: 'var(--space-3)', lineHeight: '1.6' }
-      }, 'Paste your Firebase project config JSON below. Get it from Firebase Console → Project Settings → Your Apps → SDK setup.'));
-
-      // Textarea for JSON paste
-      const textarea = el('textarea', {
-        id: 'fb-config-input',
-        placeholder: '{\n  "apiKey": "...",\n  "authDomain": "...",\n  "projectId": "...",\n  ...\n}',
-        style: {
-          width: '100%',
-          minHeight: '180px',
-          fontFamily: 'var(--font-mono)',
-          fontSize: '12px',
-          padding: 'var(--space-3)',
-          background: 'var(--surface-soft)',
-          border: '1px solid var(--hairline)',
-          borderRadius: 'var(--radius-md)',
-          color: 'var(--ink)',
-          resize: 'vertical',
-          boxSizing: 'border-box',
-          marginBottom: 'var(--space-3)',
-        },
-      });
-      // Pre-fill with existing config if set
-      if (existing) {
-        try { textarea.value = JSON.stringify(JSON.parse(existing), null, 2); } catch (e) {}
-      }
-      content.appendChild(textarea);
-      requestAnimationFrame(() => textarea.focus());
-
-      const errorEl = el('p', {
-        class: 'caption',
-        style: { color: 'var(--accent-red, #e05252)', marginBottom: 'var(--space-2)', display: 'none' }
-      });
-      content.appendChild(errorEl);
-
-      const saveBtn = el('button', {
-        class: 'btn btn-primary',
-        style: { width: '100%', marginBottom: 'var(--space-2)' },
-        onClick: () => {
-          const raw = textarea.value.trim();
-          if (!raw) {
-            errorEl.textContent = 'Please paste your Firebase config JSON.';
-            errorEl.style.display = 'block';
-            return;
-          }
-          let parsed;
-          try {
-            // Handle both raw JSON object and the JS const assignment format
-            const cleaned = raw
-              .replace(/^const\s+\w+\s*=\s*/, '')  // strip "const firebaseConfig = "
-              .replace(/;?\s*$/, '')                 // strip trailing semicolon
-              .replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2":')  // quote keys
-              .replace(/'/g, '"');                   // single → double quotes
-            parsed = JSON.parse(cleaned);
-          } catch (e) {
-            errorEl.textContent = 'Invalid JSON — make sure it\'s a valid config object.';
-            errorEl.style.display = 'block';
-            return;
-          }
-          const required = ['apiKey', 'authDomain', 'projectId'];
-          const missing = required.filter(k => !parsed[k]);
-          if (missing.length > 0) {
-            errorEl.textContent = `Missing fields: ${missing.join(', ')}`;
-            errorEl.style.display = 'block';
-            return;
-          }
-          localStorage.setItem('align_v2_firebase_config', JSON.stringify(parsed));
-          showToast('Firebase config saved — reloading…', { type: 'success' });
-          sheet.close();
-          setTimeout(() => window.location.reload(), 800); // reload so Firebase re-initializes
-        },
-      }, 'Save & Connect');
-
-      const clearBtn = el('button', {
-        class: 'btn btn-secondary',
-        style: { width: '100%' },
-        onClick: () => {
-          localStorage.removeItem('align_v2_firebase_config');
-          showToast('Firebase config removed — running local-only', { type: 'info' });
-          sheet.close();
-          container.replaceChildren();
-          renderSettings(container);
-        },
-      }, 'Remove & Run Local-Only');
-
-      content.appendChild(saveBtn);
-      if (existing) content.appendChild(clearBtn);
-    },
-  });
-}
 
 function exportJSON() {
   try {

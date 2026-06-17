@@ -15,6 +15,7 @@ import { auth, onAuthStateChanged } from './firebase-config.js';
 import { el } from './dom.js';
 import { initAIBubble } from './components/ai-bubble.js';
 import { syncHealthData } from './ai/health-sync.js';
+import { initCloudSync } from './cloud-sync.js';
 
 
 // ─── Initialize ───
@@ -22,6 +23,9 @@ import { syncHealthData } from './ai/health-sync.js';
 function init() {
   // 1. Init state from localStorage
   initState();
+
+  // 1b. Initialize cloud synchronization
+  initCloudSync();
 
   // 2. Apply time period to document
   const timePeriod = getState('timePeriod');
