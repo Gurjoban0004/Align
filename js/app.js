@@ -108,9 +108,12 @@ function init() {
   });
   if (!navigator.onLine) offlineBanner.classList.add('visible');
 
-  // 13. Device ID for conflict resolution
+  // 13. Device ID for conflict resolution (using secure fallback for non-HTTPS/older environments)
   if (!localStorage.getItem('align_device_id')) {
-    localStorage.setItem('align_device_id', crypto.randomUUID());
+    const randomUuid = (crypto && typeof crypto.randomUUID === 'function')
+      ? crypto.randomUUID()
+      : Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    localStorage.setItem('align_device_id', randomUuid);
   }
 
   // 15. Silent Apple Health sync on startup — runs in background, never blocks UI
