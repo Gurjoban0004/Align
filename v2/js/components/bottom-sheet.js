@@ -101,6 +101,7 @@ export function showBottomSheet(opts) {
   document.body.style.top = `-${currentScrollY}px`;
   document.body.style.width = '100%';
   document.body.style.overflow = 'hidden';
+  document.body.classList.add('sheet-open');
 
   requestAnimationFrame(() => {
     sheet.classList.add('sheet-visible');
@@ -124,6 +125,7 @@ export function showBottomSheet(opts) {
     document.body.style.width = '';
     document.body.style.overflow = '';
     delete document.body.dataset.scrollY;
+    document.body.classList.remove('sheet-open');
     window.scrollTo(0, savedScrollY);
 
     setTimeout(() => {

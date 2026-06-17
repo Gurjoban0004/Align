@@ -1320,6 +1320,13 @@ select.form-input {
   right: 16px;
   z-index: 850;
   font-family: var(--font-body);
+  transition: transform var(--duration-normal) var(--ease-spring), opacity var(--duration-normal) var(--ease-default);
+}
+
+body.sheet-open .ai-bubble-container {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(24px) scale(0.85);
 }
 
 @media (min-width: 768px) {

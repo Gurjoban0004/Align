@@ -424,6 +424,96 @@ export function calendarHeatmap(completions, opts = {}) {
   const completionSet = new Set(completions);
   const today = new Date();
 
+  if (layout === 'calendar') {
+    const headerHeight = 16;
+    const width = 7 * (cellSize + gap) + gap;
+
+    const oldestDate = new Date(today);
+    oldestDate.setDate(today.getDate() - (days - 1));
+    const startSunday = new Date(oldestDate);
+    startSunday.setDate(oldestDate.getDate() - oldestDate.getDay());
+    startSunday.setHours(0, 0, 0, 0);
+
+    const diffTodayMs = today.getTime() - startSunday.getTime();
+    const diffTodayDays = Math.floor(diffTodayMs / (24 * 60 * 60 * 1000));
+    const totalRows = Math.floor(diffTodayDays / 7) + 1;
+
+    const height = headerHeight + totalRows * (cellSize + gap) + gap;
+
+    const svg = elNS('svg', {
+      width: String(width),
+      height: String(height),
+      viewBox: `0 0 ${width} ${height}`,
+      class: 'heatmap-svg calendar-layout',
+    });
+
+    const weekdays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+    weekdays.forEach((dayLabel, col) => {
+      const x = gap + col * (cellSize + gap) + cellSize / 2;
+      const text = elNS('text', {
+        x: String(x),
+        y: '10',
+        'text-anchor': 'middle',
+        fill: 'var(--text-muted)',
+        style: {
+          fontFamily: 'var(--font-sans)',
+          fontSize: '8px',
+          fontWeight: '600',
+        },
+      }, dayLabel);
+      svg.appendChild(text);
+    });
+
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(today.getDate() - i);
+      date.setHours(0, 0, 0, 0);
+      const dateStr = date.toISOString().split('T')[0];
+
+      const isCompleted = completionSet.has(dateStr);
+
+      let isStreak = false;
+      if (isCompleted) {
+        const next = new Date(date);
+        next.setDate(date.getDate() + 1);
+        const nextStr = next.toISOString().split('T')[0];
+        const prev = new Date(date);
+        prev.setDate(date.getDate() - 1);
+        const prevStr = prev.toISOString().split('T')[0];
+        isStreak = completionSet.has(nextStr) || completionSet.has(prevStr);
+      }
+
+      const col = date.getDay();
+      const diffMs = date.getTime() - startSunday.getTime();
+      const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+      const row = Math.floor(diffDays / 7);
+
+      const x = gap + col * (cellSize + gap);
+      const y = headerHeight + gap + row * (cellSize + gap);
+
+      const isToday = dateStr === today.toISOString().split('T')[0];
+
+      const rect = elNS('rect', {
+        x: String(x),
+        y: String(y),
+        width: String(cellSize),
+        height: String(cellSize),
+        rx: '2',
+        fill: isCompleted ? (isStreak ? fullColor : fillColor) : emptyColor,
+        stroke: isToday ? 'var(--primary)' : 'none',
+        'stroke-width': isToday ? '1.5' : '0',
+        opacity: isCompleted ? '1' : '0.6',
+        class: 'heatmap-cell',
+        'data-date': dateStr,
+        'data-completed': isCompleted ? 'true' : 'false',
+      });
+
+      svg.appendChild(rect);
+    }
+
+    return svg;
+  }
+
   if (layout === 'strip') {
     const width = days * (cellSize + gap) - gap;
     const height = cellSize;
