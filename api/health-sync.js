@@ -25,6 +25,7 @@ const METRIC_MAP = {
   dietary_carbohydrates: 'carbs',
   dietary_fat_total: 'fat',
   dietary_water: 'water',
+  sleep_analysis: 'sleep',
   heart_rate: 'heartRate',
   resting_heart_rate: 'restingHeartRate',
   respiratory_rate: 'respiratoryRate',
@@ -125,7 +126,7 @@ function processMetric(metric) {
 }
 
 export default async function handler(req, res) {
-  // Add CORS headers to allow requests from anywhere (like an Apple Shortcut or third party app)
+  // Add CORS headers
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
@@ -144,7 +145,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Robustly parse body in case Content-Type is not set to application/json by the client
+    // 1. Robustly parse body in case Content-Type is not set to application/json by client
     let body = req.body;
     if (typeof body === 'string') {
       try {
@@ -160,12 +161,27 @@ export default async function handler(req, res) {
       }
     }
 
-    // Default payload fallback
     if (!body || typeof body !== 'object') {
       body = {};
     }
 
-    const syncToken = req.query.token || req.query.syncToken || body.syncToken || body.SyncToken;
+    // 2. Extract Auth Sync Token from headers or query parameters or body
+    let syncToken = req.query.token || req.query.syncToken || body.syncToken || body.SyncToken;
+
+    if (!syncToken && req.headers['x-sync-token']) {
+      syncToken = req.headers['x-sync-token'];
+    }
+    if (!syncToken && req.headers['api-key']) {
+      syncToken = req.headers['api-key'];
+    }
+    if (!syncToken && req.headers['authorization']) {
+      const authHeader = req.headers['authorization'];
+      if (authHeader.startsWith('Bearer ')) {
+        syncToken = authHeader.substring(7).trim();
+      } else {
+        syncToken = authHeader.trim();
+      }
+    }
 
     if (!syncToken) {
       return res.status(401).json({ error: 'Unauthorized: Missing syncToken' });
@@ -183,22 +199,62 @@ export default async function handler(req, res) {
     }
 
     const userId = usersSnapshot.docs[0].id;
+    const bodyData = body.data;
+    const aggregated = {};
 
-    // ─── 1. Health Auto Export Webhook Payload Format ───
-    const metrics = body?.data?.metrics;
-    if (metrics && Array.isArray(metrics)) {
-      const aggregated = {};
-      metrics.forEach(metric => {
+    // ─── 3. Health Auto Export Formats ───
+    if (bodyData && Array.isArray(bodyData)) {
+      // FORMAT B: New / Aggregated Daily logs format:
+      // "data": [ { "date": "2026-06-17", "metrics": { "step_count": { "value": 8432 } } } ]
+      bodyData.forEach(dayEntry => {
+        const rawDate = dayEntry.date;
+        const dateStr = extractDate(rawDate);
+        if (!dateStr || !dayEntry.metrics) return;
+
+        if (!aggregated[dateStr]) aggregated[dateStr] = {};
+
+        Object.entries(dayEntry.metrics).forEach(([metricName, metricObj]) => {
+          const alignField = METRIC_MAP[metricName];
+          if (!alignField || !metricObj) return;
+
+          let value = metricObj.value !== undefined ? metricObj.value : metricObj.qty;
+          if (value === undefined) return;
+
+          value = parseFloat(value);
+          if (isNaN(value)) return;
+
+          // Perform conversions
+          if (metricName === 'dietary_water') {
+            const units = (metricObj.unit || '').toLowerCase();
+            if (units === 'ml' || units === 'milliliters') {
+              value = mlToCups(value);
+            }
+          }
+          if (metricName === 'body_mass') {
+            const units = (metricObj.unit || '').toLowerCase();
+            if (units === 'lbs' || units === 'lb') {
+              value = lbsToKg(value);
+            }
+          }
+
+          aggregated[dateStr][alignField] = Math.round(value * 10) / 10;
+        });
+      });
+    } else if (bodyData && typeof bodyData === 'object' && Array.isArray(bodyData.metrics)) {
+      // FORMAT A: Old / Raw metrics format:
+      // "data": { "metrics": [ { "name": "step_count", "data": [...] } ] }
+      bodyData.metrics.forEach(metric => {
         const processed = processMetric(metric);
         Object.entries(processed).forEach(([dateStr, fields]) => {
           if (!aggregated[dateStr]) aggregated[dateStr] = {};
           Object.assign(aggregated[dateStr], fields);
         });
       });
+    }
 
+    const dates = Object.keys(aggregated);
+    if (dates.length > 0) {
       const batch = db.batch();
-      const dates = Object.keys(aggregated);
-
       for (const dStr of dates) {
         const updateData = aggregated[dStr];
         if (Object.keys(updateData).length > 0) {
@@ -211,17 +267,17 @@ export default async function handler(req, res) {
       }
 
       await batch.commit();
-      return res.status(200).json({ success: true, message: `Synced Health Auto Export: ${dates.length} date(s)` });
+      return res.status(200).json({ success: true, message: `Synced Health Auto Export: ${dates.length} date(s) successfully.` });
     }
 
-    // ─── 2. Flat Apple Shortcut Payload Format ───
+    // ─── 4. Flat Apple Shortcuts Payload Format ───
     let date = body.date || body.Date;
-    const rawSteps = body.steps || body.Steps || body.Number; // Fallback if they left the default 'Number' key
+    const rawSteps = body.steps || body.Steps || body.Number; // Fallback if they left default 'Number' key
     const rawSleep = body.sleep || body.Sleep;
     const rawActiveBurn = body.activeBurn || body.ActiveBurn || body.activeburn;
 
     if (!date) {
-      return res.status(400).json({ error: 'Bad Request: Missing date (YYYY-MM-DD)' });
+      return res.status(400).json({ error: 'Bad Request: Missing date (YYYY-MM-DD).' });
     }
 
     // Auto-fix Apple's messy localized date strings (e.g. "08/06/26, 12:00 PM")
