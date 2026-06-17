@@ -149,8 +149,81 @@ export function initState() {
       localStorage.setItem(LS_PREFIX + 'profile', JSON.stringify(_state.profile));
     }
   }
+
+  // 1c. Bidirectionally sync habits and logs immediately on init
+  syncAllHabitsAndLogs();
 }
 
+let _isSyncing = false;
+export function syncAllHabitsAndLogs() {
+  if (_isSyncing) return;
+  _isSyncing = true;
+  try {
+    const habits = _state.habits || [];
+    const logs = _state.logs || {};
+    let logsUpdated = false;
+    let habitsUpdated = false;
+
+    // 1. Ensure dates in completions are in logs
+    const newHabits = habits.map(h => {
+      const completionsSet = new Set(h.completions || []);
+      const originalSize = completionsSet.size;
+
+      completionsSet.forEach(dateStr => {
+        if (!logs[dateStr]) {
+          logs[dateStr] = getEmptyDayLog();
+          logsUpdated = true;
+        }
+        if (!logs[dateStr].habitsCompleted) {
+          logs[dateStr].habitsCompleted = [];
+          logsUpdated = true;
+        }
+        if (!logs[dateStr].habitsCompleted.includes(h.id)) {
+          logs[dateStr].habitsCompleted.push(h.id);
+          logsUpdated = true;
+        }
+      });
+
+      // 2. Ensure dates in logs are in completions
+      Object.keys(logs).forEach(dateStr => {
+        const day = logs[dateStr];
+        if (day && day.habitsCompleted && day.habitsCompleted.includes(h.id)) {
+          if (!completionsSet.has(dateStr)) {
+            completionsSet.add(dateStr);
+            habitsUpdated = true;
+          }
+        }
+      });
+
+      if (completionsSet.size !== originalSize) {
+        habitsUpdated = true;
+      }
+      return { ...h, completions: Array.from(completionsSet) };
+    });
+
+    // 3. Prune orphaned habit IDs from logs
+    const activeHabitIds = new Set(habits.map(h => h.id));
+    Object.keys(logs).forEach(dateStr => {
+      const day = logs[dateStr];
+      if (day && day.habitsCompleted) {
+        const filtered = day.habitsCompleted.filter(id => activeHabitIds.has(id));
+        if (filtered.length !== day.habitsCompleted.length) {
+          day.habitsCompleted = filtered;
+          logsUpdated = true;
+        }
+      }
+    });
+
+    if (logsUpdated) {
+      setState('logs', { ...logs });
+    }
+    if (habitsUpdated) {
+      setState('habits', newHabits);
+    }
+  } finally {
+    _isSyncing = false;
+  }
+}
 
 /**
  * Get a state value.
@@ -191,6 +264,11 @@ export function setState(key, value) {
   // Notify global subscribers
   for (const cb of _globalSubs) {
     try { cb(key, value, prev); } catch (e) { console.error('Global subscriber error:', e); }
+  }
+
+  // Auto-sync logs/habits when habits or logs change
+  if (key === 'habits' || key === 'logs') {
+    syncAllHabitsAndLogs();
   }
 }
 
@@ -252,6 +330,9 @@ export function updateDayLog(dateStr, updates) {
 
   const logs = { ..._state.logs, [d]: day };
   setState('logs', logs);
+
+  // Sync completions
+  syncAllHabitsAndLogs();
 }
 
 /**
@@ -263,6 +344,15 @@ function syncAutoHabits(day) {
 
   const stepGoal = profile.targetSteps || 10000;
   const waterGoal = profile.targetWater || 8;
+
+  // Reading habit (h1)
+  const hasReadHabit = day.habitsCompleted.includes('h1');
+  const targetPages = 15;
+  if (day.pagesRead >= targetPages && !hasReadHabit) {
+    day.habitsCompleted.push('h1');
+  } else if (day.pagesRead < targetPages && hasReadHabit) {
+    day.habitsCompleted = day.habitsCompleted.filter(id => id !== 'h1');
+  }
 
   // Steps habit (h2)
   const hasStepHabit = day.habitsCompleted.includes('h2');

@@ -15,11 +15,11 @@ export function renderHabits(container) {
   const dateStr = getState('dateStr');
   const day = getDayLog(dateStr);
   const habits = getState('habits') || [];
-  const completed = day.habitsCompleted || [];
+  const completed = (day.habitsCompleted || []).filter(id => habits.some(h => h.id === id));
 
   const completedCount = completed.length;
-  const totalCount = habits.length || 1;
-  const percent = Math.round((completedCount / totalCount) * 100);
+  const totalCount = habits.length;
+  const percent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const page = el('div', { class: 'habits-page view-enter' });
   const wrap = el('div', { class: 'container' });
@@ -82,11 +82,19 @@ export function renderHabits(container) {
             el('span', {}, `${streak}`)
           ) : null,
           el('button', {
+            class: 'habit-edit-btn',
+            style: { marginLeft: '8px', color: 'var(--text-subtle)', cursor: 'pointer' },
+            onClick: (e) => {
+              e.stopPropagation();
+              openEditHabit(habit, container);
+            }
+          }, icon(ICONS.edit, { size: 14 })),
+          el('button', {
             class: 'habit-delete-btn',
             style: { marginLeft: '8px', color: 'var(--text-subtle)', cursor: 'pointer' },
             onClick: (e) => {
               e.stopPropagation();
-              deleteHabitWithUndo(habit.id, habit.title, container);
+              confirmDeleteHabit(habit, container);
             }
           }, icon(ICONS.trash, { size: 14 }))
         )
@@ -127,8 +135,9 @@ export function renderHabits(container) {
 function toggleHabit(habitId, dateStr, container) {
   const day = getDayLog(dateStr);
   let completed = [...(day.habitsCompleted || [])];
+  const isNowCompleted = !completed.includes(habitId);
 
-  // 1. Toggle in Day Log (for Dashboard Rings)
+  // 1. Toggle in Day Log (dashboard rings and central sync trigger)
   if (completed.includes(habitId)) {
     completed = completed.filter(id => id !== habitId);
   } else {
@@ -136,28 +145,16 @@ function toggleHabit(habitId, dateStr, container) {
   }
   updateDayLog(dateStr, { habitsCompleted: completed });
 
-  // 2. Toggle in Habit completions list (for heatmap/streaks)
-  const habits = getState('habits') || [];
-  const updatedHabits = habits.map(h => {
-    if (h.id === habitId) {
-      let completions = [...(h.completions || [])];
-      if (completions.includes(dateStr)) {
-        completions = completions.filter(d => d !== dateStr);
-      } else {
-        completions.push(dateStr);
-      }
-      
-      // Multiples of 7 streak celebration trigger
-      const currentStreak = calculateStreakFromCompletions(completions);
-      if (!completions.includes(dateStr) === false && currentStreak > 0 && currentStreak % 7 === 0) {
+  // 2. Multiples of 7 streak celebration trigger
+  if (isNowCompleted) {
+    const habit = (getState('habits') || []).find(h => h.id === habitId);
+    if (habit) {
+      const currentStreak = calculateStreakFromCompletions(habit.completions || []);
+      if (currentStreak > 0 && currentStreak % 7 === 0) {
         setTimeout(() => showToast(`🔥 ${currentStreak}-day streak! Keep it up!`, { type: 'success' }), 300);
       }
-      
-      return { ...h, completions };
     }
-    return h;
-  });
-  setState('habits', updatedHabits);
+  }
 
   container.replaceChildren();
   renderHabits(container);
@@ -278,6 +275,122 @@ function openAddHabit(container) {
   });
 }
 
+function openEditHabit(habit, container) {
+  let nameInput, categoryInput;
+
+  showBottomSheet({
+    title: 'Edit Habit',
+    render: (content) => {
+      nameInput = formInput({ value: habit.title, placeholder: 'e.g. Meditate 10 min', id: 'edit-habit-name' });
+      categoryInput = formInput({ value: habit.category || '', placeholder: 'e.g. Mind, Health', id: 'edit-habit-category' });
+
+      content.appendChild(formGroup('Habit Name', nameInput));
+      content.appendChild(formGroup('Category', categoryInput));
+
+      const saveBtn = el('button', {
+        class: 'btn btn-primary',
+        style: { width: '100%', marginTop: 'var(--space-4)' },
+        onClick: () => {
+          const title = nameInput.value.trim();
+          if (!title) { showToast('Enter habit name', { type: 'warning' }); return; }
+
+          const habits = getState('habits') || [];
+          const updatedHabits = habits.map(h => {
+            if (h.id === habit.id) {
+              return {
+                ...h,
+                title,
+                category: categoryInput.value.trim() || 'General',
+              };
+            }
+            return h;
+          });
+          setState('habits', updatedHabits);
+
+          showToast(`"${title}" updated`, { type: 'success' });
+          
+          // Close sheet
+          const sheet = document.getElementById('active-sheet');
+          if (sheet) {
+            const closeBtn = sheet.querySelector('.sheet-close-btn');
+            if (closeBtn) closeBtn.click();
+          }
+
+          container.replaceChildren();
+          renderHabits(container);
+        },
+      }, 'Save Changes');
+      content.appendChild(saveBtn);
+    },
+  });
+}
+
+function confirmDeleteHabit(habit, container) {
+  showBottomSheet({
+    title: 'Delete Habit',
+    render: (content) => {
+      content.appendChild(el('div', {
+        style: {
+          padding: 'var(--space-2) 0 var(--space-4) 0',
+          color: 'var(--ink)',
+          fontSize: 'var(--text-sm)',
+          lineHeight: '1.5',
+        }
+      },
+        el('p', { style: { marginBottom: 'var(--space-3)', fontWeight: '600' } },
+          `Are you sure you want to delete "${habit.title}"?`
+        ),
+        el('p', { style: { color: 'var(--text-muted)', fontSize: 'var(--text-xs)' } },
+          'This will permanently delete this habit and erase all of its completion history, streaks, and heatmaps.'
+        )
+      ));
+
+      // Buttons container
+      const btnRow = el('div', {
+        style: {
+          display: 'flex',
+          gap: '12px',
+          marginTop: 'var(--space-4)',
+        }
+      });
+
+      // Cancel button
+      const cancelBtn = el('button', {
+        class: 'btn btn-secondary',
+        style: { flex: '1' },
+        onClick: () => {
+          const sheet = document.getElementById('active-sheet');
+          if (sheet) {
+            const closeBtn = sheet.querySelector('.sheet-close-btn');
+            if (closeBtn) closeBtn.click();
+          }
+        }
+      }, 'Cancel');
+
+      // Delete button
+      const deleteBtn = el('button', {
+        class: 'btn btn-primary',
+        style: { flex: '1', backgroundColor: 'var(--error)', borderColor: 'var(--error)', color: 'white' },
+        onClick: () => {
+          // Perform actual delete
+          deleteHabitWithUndo(habit.id, habit.title, container);
+          
+          // Close sheet
+          const sheet = document.getElementById('active-sheet');
+          if (sheet) {
+            const closeBtn = sheet.querySelector('.sheet-close-btn');
+            if (closeBtn) closeBtn.click();
+          }
+        }
+      }, 'Delete');
+
+      btnRow.appendChild(cancelBtn);
+      btnRow.appendChild(deleteBtn);
+      content.appendChild(btnRow);
+    }
+  });
+}
+
 function deleteHabitWithUndo(habitId, habitTitle, container) {
   const habits = getState('habits') || [];
   const habitToDelete = habits.find(h => h.id === habitId);
@@ -290,14 +403,12 @@ function deleteHabitWithUndo(habitId, habitTitle, container) {
   container.replaceChildren();
   renderHabits(container);
 
-  let undone = false;
   showToast(`Deleted "${habitTitle}"`, {
     type: 'info',
     duration: 3000,
     action: {
       label: 'Undo',
       callback: () => {
-        undone = true;
         // Put it back
         const currentHabits = getState('habits') || [];
         setState('habits', [...currentHabits, habitToDelete]);
