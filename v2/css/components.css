@@ -661,8 +661,8 @@
   z-index: var(--z-modal);
   transform: translateY(100%);
   transition: transform var(--duration-slow) var(--ease-spring);
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
 }
 
 .bottom-sheet.sheet-visible {
@@ -719,6 +719,9 @@
 
 .sheet-content {
   padding: 0 var(--space-5) calc(var(--space-8) + var(--safe-bottom));
+  overflow-y: auto;
+  flex: 1;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ─── Form Elements ─── */

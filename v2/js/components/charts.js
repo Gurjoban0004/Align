@@ -418,10 +418,63 @@ export function calendarHeatmap(completions, opts = {}) {
     emptyColor = 'var(--surface-soft)',
     fillColor = 'var(--success)',
     fullColor = 'var(--primary)',
+    layout = 'grid',
   } = opts;
 
   const completionSet = new Set(completions);
   const today = new Date();
+
+  if (layout === 'strip') {
+    const width = days * (cellSize + gap) - gap;
+    const height = cellSize;
+
+    const svg = elNS('svg', {
+      width: '100%',
+      height: String(height),
+      viewBox: `0 0 ${width} ${height}`,
+      class: 'heatmap-svg strip-layout',
+      style: { maxWidth: '100%' },
+    });
+
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(today.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      const index = days - 1 - i;
+
+      const isCompleted = completionSet.has(dateStr);
+
+      let isStreak = false;
+      if (isCompleted) {
+        const next = new Date(date);
+        next.setDate(date.getDate() + 1);
+        const nextStr = next.toISOString().split('T')[0];
+        const prev = new Date(date);
+        prev.setDate(date.getDate() - 1);
+        const prevStr = prev.toISOString().split('T')[0];
+        isStreak = completionSet.has(nextStr) || completionSet.has(prevStr);
+      }
+
+      const x = index * (cellSize + gap);
+      const y = 0;
+
+      const rect = elNS('rect', {
+        x: String(x), y: String(y),
+        width: String(cellSize), height: String(cellSize),
+        rx: '2',
+        fill: isCompleted ? (isStreak ? fullColor : fillColor) : emptyColor,
+        opacity: isCompleted ? '1' : '0.5',
+        class: 'heatmap-cell',
+        'data-date': dateStr,
+        'data-completed': isCompleted ? 'true' : 'false',
+      });
+
+      svg.appendChild(rect);
+    }
+
+    return svg;
+  }
+
   const cols = Math.ceil(days / 7);
   const width = cols * (cellSize + gap) + gap;
   const height = 7 * (cellSize + gap) + gap;
@@ -437,13 +490,11 @@ export function calendarHeatmap(completions, opts = {}) {
     const date = new Date(today);
     date.setDate(today.getDate() - i);
     const dateStr = date.toISOString().split('T')[0];
-    const daysSinceEnd = days - 1 - i;
     const col = Math.floor((days - 1 - i) / 7);
     const row = date.getDay();
 
     const isCompleted = completionSet.has(dateStr);
 
-    // Check if part of active streak
     let isStreak = false;
     if (isCompleted) {
       const next = new Date(date);

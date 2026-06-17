@@ -165,7 +165,10 @@ function createBookCard(book, pageContainer) {
       )
     : null;
 
-  return el('div', { class: 'media-card' },
+  return el('div', { 
+    class: 'media-card setting-tappable',
+    onClick: () => openBookDetails(book, pageContainer)
+  },
     coverEl,
     el('div', { class: 'media-card-info', style: { flex: '1' } },
       el('strong', { class: 'media-card-title' }, book.title),
@@ -203,7 +206,10 @@ function renderMoviesList(container, movies, pageContainer) {
         ? el('img', { class: 'media-card-cover', src: movie.coverUrl, alt: movie.title })
         : el('div', { class: 'media-card-cover fallback' }, icon(ICONS.film || ICONS.activity, { size: 20 }));
 
-      list.appendChild(el('div', { class: 'media-card' },
+      list.appendChild(el('div', { 
+        class: 'media-card setting-tappable',
+        onClick: () => openMovieDetails(movie, pageContainer)
+      },
         posterEl,
         el('div', { class: 'media-card-info', style: { flex: '1' } },
           el('strong', { class: 'media-card-title' }, movie.title),
@@ -412,6 +418,7 @@ function openAddMovie(pageContainer) {
             coverUrl: null,
             genre: '',
             imdbRating: '',
+            watchedAt: Date.now(),
           };
           movies.push(newMovie);
           setState('movies', movies);
@@ -431,13 +438,16 @@ function openAddMovie(pageContainer) {
 }
 
 function openLogPages(book, pageContainer) {
-  let pagesInput;
+  let pagesInput, durationInput;
 
   showBottomSheet({
     title: `Log Reading: ${book.title}`,
     render: (content) => {
       pagesInput = formInput({ type: 'number', placeholder: 'Pages read today', inputmode: 'numeric', id: 'log-pages-read' });
+      durationInput = formInput({ type: 'number', placeholder: 'Time spent in minutes (optional)', inputmode: 'numeric', id: 'log-pages-duration' });
+      
       content.appendChild(formGroup('How many pages did you read?', pagesInput));
+      content.appendChild(formGroup('How many minutes did it take? (optional)', durationInput));
 
       const saveBtn = el('button', {
         class: 'btn btn-primary',
@@ -446,6 +456,7 @@ function openLogPages(book, pageContainer) {
           const pgs = parseInt(pagesInput.value) || 0;
           if (pgs <= 0) { showToast('Enter valid pages', { type: 'warning' }); return; }
 
+          const mins = parseInt(durationInput.value) || 0;
           const todayDate = getState('dateStr') || new Date().toISOString().split('T')[0];
 
           // 1. Update book local reading details
@@ -457,7 +468,12 @@ function openLogPages(book, pageContainer) {
               const finalCurrent = Math.min(current, max);
               const status = finalCurrent >= max ? 'finished' : b.status;
               const readingLog = [...(b.readingLog || [])];
-              readingLog.push({ date: todayDate, pagesRead: pgs });
+              readingLog.push({ 
+                date: todayDate, 
+                timestamp: Date.now(),
+                pagesRead: pgs,
+                durationMin: mins > 0 ? mins : null
+              });
 
               return {
                 ...b,
@@ -481,5 +497,148 @@ function openLogPages(book, pageContainer) {
       }, 'Save Progress');
       content.appendChild(saveBtn);
     },
+  });
+}
+
+function openBookDetails(book, pageContainer) {
+  const sheet = showBottomSheet({
+    title: book.title,
+    render: (content) => {
+      const headerRow = el('div', { style: { display: 'flex', gap: 'var(--space-4)', marginBottom: 'var(--space-4)' } },
+        book.coverUrl 
+          ? el('img', { src: book.coverUrl, style: { width: '80px', height: '120px', borderRadius: 'var(--radius-md)', objectFit: 'cover', boxShadow: 'var(--shadow-md)' } })
+          : el('div', { style: { width: '80px', height: '120px', background: 'var(--surface-soft)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' } }, icon(ICONS.book, { size: 24 })),
+        el('div', { style: { display: 'flex', flexDirection: 'column', justifyContent: 'center', flex: 1 } },
+          el('h3', { style: { margin: '0 0 var(--space-1) 0', fontSize: 'var(--text-md)', fontWeight: 'var(--weight-bold)' } }, book.title),
+          el('span', { style: { color: 'var(--text-subtle)', marginBottom: 'var(--space-2)' } }, `By ${book.author || 'Unknown'}`),
+          el('span', { class: `badge badge-${book.status === 'finished' ? 'green' : book.status === 'reading' ? 'coral' : 'blue'}`, style: { width: 'fit-content' } }, book.status.toUpperCase())
+        )
+      );
+      content.appendChild(headerRow);
+
+      if (book.status === 'reading' || book.status === 'finished') {
+        const progress = book.totalPages > 0 ? Math.round((book.currentPage / book.totalPages) * 100) : 0;
+        const progressSection = el('div', { style: { background: 'var(--surface-soft)', padding: 'var(--space-3)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-4)' } },
+          el('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-2)' } },
+            el('strong', {}, 'Reading Progress'),
+            el('span', {}, `${book.currentPage} / ${book.totalPages} pgs (${progress}%)`)
+          ),
+          el('div', { class: 'mini-progress-bar', style: { height: '8px', background: 'var(--hairline-soft)' } },
+            el('div', { class: 'mini-progress-fill', style: { width: progress + '%', height: '100%', background: 'var(--primary)', borderRadius: 'var(--radius-full)' } })
+          )
+        );
+        content.appendChild(progressSection);
+      }
+
+      if (book.status === 'finished') {
+        const setRating = (val) => {
+          const books = getState('books') || [];
+          const updated = books.map(b => b.id === book.id ? { ...b, rating: val } : b);
+          setState('books', updated);
+          showToast(`Rated "${book.title}" ${val} stars`, { type: 'success' });
+          sheet.close();
+          openBookDetails({ ...book, rating: val }, pageContainer);
+        };
+
+        const stars = el('div', { style: { display: 'flex', gap: '4px' } });
+        for (let i = 1; i <= 5; i++) {
+          const starIcon = el('span', {
+            style: { 
+              cursor: 'pointer', 
+              fontSize: '22px', 
+              color: i <= (book.rating || 0) ? '#f5c518' : 'var(--text-subtle)' 
+            },
+            onClick: () => setRating(i)
+          }, '★');
+          stars.appendChild(starIcon);
+        }
+
+        const ratingRow = el('div', { style: { display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' } },
+          el('strong', {}, 'Your Rating:'),
+          stars
+        );
+        content.appendChild(ratingRow);
+      }
+
+      content.appendChild(el('h4', { style: { fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-bold)', marginBottom: 'var(--space-2)' } }, 'Reading Logs'));
+      
+      const logList = el('div', { style: { display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', maxHeight: '160px', overflowY: 'auto', paddingRight: '4px' } });
+      const logs = book.readingLog || [];
+      
+      if (logs.length === 0) {
+        logList.appendChild(el('p', { class: 'caption', style: { color: 'var(--text-muted)', fontStyle: 'italic' } }, 'No sessions logged yet.'));
+      } else {
+        const sortedLogs = [...logs].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        sortedLogs.forEach(log => {
+          const logDate = log.timestamp 
+            ? new Date(log.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+            : log.date;
+            
+          const durationText = log.durationMin 
+            ? ` (${log.durationMin} mins, ${Math.round((log.pagesRead / log.durationMin) * 10) / 10} pgs/min)` 
+            : '';
+            
+          logList.appendChild(el('div', { 
+            style: { 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              padding: 'var(--space-2) var(--space-3)', 
+              background: 'var(--surface-soft)', 
+              borderRadius: 'var(--radius-sm)' 
+            } 
+          },
+            el('span', { class: 'caption', style: { color: 'var(--text-subtle)' } }, logDate),
+            el('strong', { style: { fontSize: 'var(--text-sm)' } }, `+${log.pagesRead} pages${durationText}`)
+          ));
+        });
+      }
+      content.appendChild(logList);
+
+      const actions = el('div', { style: { display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-4)' } });
+      if (book.status === 'reading') {
+        actions.appendChild(el('button', {
+          class: 'btn btn-primary',
+          style: { flex: 1 },
+          onClick: () => {
+            sheet.close();
+            openLogPages(book, pageContainer);
+          }
+        }, 'Log Reading Session'));
+      }
+      content.appendChild(actions);
+    }
+  });
+}
+
+function openMovieDetails(movie, pageContainer) {
+  showBottomSheet({
+    title: movie.title,
+    render: (content) => {
+      const headerRow = el('div', { style: { display: 'flex', gap: 'var(--space-4)', marginBottom: 'var(--space-4)' } },
+        movie.coverUrl 
+          ? el('img', { src: movie.coverUrl, style: { width: '80px', height: '120px', borderRadius: 'var(--radius-md)', objectFit: 'cover', boxShadow: 'var(--shadow-md)' } })
+          : el('div', { style: { width: '80px', height: '120px', background: 'var(--surface-soft)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' } }, icon(ICONS.film || ICONS.activity, { size: 24 })),
+        el('div', { style: { display: 'flex', flexDirection: 'column', justifyContent: 'center', flex: 1 } },
+          el('h3', { style: { margin: '0 0 var(--space-1) 0', fontSize: 'var(--text-md)', fontWeight: 'var(--weight-bold)' } }, movie.title),
+          movie.year ? el('span', { style: { color: 'var(--text-subtle)' } }, `Year: ${movie.year}`) : null,
+          movie.genre ? el('span', { class: 'caption', style: { fontStyle: 'italic', color: 'var(--text-muted)' } }, movie.genre) : null,
+          movie.imdbRating ? el('span', { class: 'caption bold', style: { fontWeight: 'bold', color: 'var(--primary)', marginTop: 'var(--space-1)' } }, `IMDb: ⭐ ${movie.imdbRating}`) : null
+        )
+      );
+      content.appendChild(headerRow);
+
+      if (movie.plot) {
+        content.appendChild(el('p', { class: 'caption', style: { color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 'var(--space-4)' } }, movie.plot));
+      }
+
+      content.appendChild(el('div', { style: { background: 'var(--surface-soft)', padding: 'var(--space-3)', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-4)' } },
+        el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+          el('strong', {}, 'Watched Details'),
+          movie.rating ? el('span', { style: { color: '#f5c518', fontSize: '16px' } }, '★'.repeat(movie.rating)) : null
+        ),
+        movie.watchedAt ? el('p', { class: 'caption', style: { margin: '8px 0 0 0', color: 'var(--text-subtle)' } }, `Watched on: ${new Date(movie.watchedAt).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`) : null
+      ));
+    }
   });
 }

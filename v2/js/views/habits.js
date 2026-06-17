@@ -100,9 +100,10 @@ export function renderHabits(container) {
         }
       },
         calendarHeatmap(completions, {
-          days: 90,
-          cellSize: 8,
-          gap: 2,
+          days: 30,
+          cellSize: 10,
+          gap: 3,
+          layout: 'strip',
         })
       )
     );

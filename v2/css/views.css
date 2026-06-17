@@ -759,6 +759,18 @@
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
   gap: var(--space-4);
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-default), box-shadow var(--duration-fast) var(--ease-default), border-color var(--duration-fast) var(--ease-default);
+}
+
+.media-card:hover {
+  border-color: var(--accent-coral-soft, rgba(204, 120, 92, 0.25));
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1.5px);
+}
+
+.media-card:active {
+  transform: translateY(0.5px);
 }
 
 .media-card-cover {

@@ -9,9 +9,8 @@ import {
   getGreeting, getWeeklyTrends, getActiveBurn,
 } from '../state.js';
 import { createMetricRing } from '../components/metric-ring.js';
-import { createInputBar } from '../components/input-bar.js';
 import { sparkline, lineChart, barChart, donutChart } from '../components/charts.js';
-import { getDailyReview, sendCoachChat } from '../ai/gemini.js';
+import { getDailyReview } from '../ai/gemini.js';
 
 /**
  * Render the dashboard view into the container.
@@ -59,20 +58,9 @@ export function renderDashboard(container) {
   page.appendChild(reviewContainer);
   loadAIReview(reviewContainer);
 
-  // ─── Coach Chat ───
-  page.appendChild(createCoachChat());
-
   // ─── Today's Activity Feed ───
   const feed = createActivityFeed(day);
   if (feed) page.appendChild(feed);
-
-  // ─── Conversational Input Bar ───
-  const inputBar = createInputBar(() => {
-    // Re-render dashboard on log applied
-    container.replaceChildren();
-    renderDashboard(container);
-  });
-  page.appendChild(inputBar);
 
   container.appendChild(page);
 }
@@ -650,76 +638,4 @@ function renderReviewPanel(container, review) {
   container.replaceChildren(panel);
 }
 
-// ─── Coach Chat ───
-
-function createCoachChat() {
-  const chatHistory = [];
-
-  const chat = el('div', { class: 'coach-chat' });
-
-  // Header
-  chat.appendChild(el('div', { class: 'coach-chat-header' },
-    icon(ICONS.sparkles, { size: 16 }),
-    el('span', {}, 'Ask your Coach')
-  ));
-
-  // Messages
-  const messages = el('div', { class: 'coach-chat-messages', id: 'coach-messages' },
-    el('div', { class: 'chat-msg chat-msg-ai' },
-      'Hey! Ask me anything about your health data. Try "How am I doing?" or "How\'s my protein?"'
-    )
-  );
-  chat.appendChild(messages);
-
-  // Input
-  const input = el('input', {
-    class: 'coach-chat-field',
-    type: 'text',
-    placeholder: 'Ask your coach…',
-    id: 'coach-input',
-  });
-
-  const sendBtn = el('button', {
-    class: 'coach-chat-send',
-    onClick: () => handleSend(),
-  }, icon(ICONS.send, { size: 14 }));
-
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') handleSend();
-  });
-
-  chat.appendChild(el('div', { class: 'coach-chat-input' }, input, sendBtn));
-
-  async function handleSend() {
-    const text = input.value.trim();
-    if (!text) return;
-    input.value = '';
-
-    // Add user message
-    chatHistory.push({ role: 'user', text });
-    messages.appendChild(el('div', { class: 'chat-msg chat-msg-user fade-in' }, text));
-
-    // Typing indicator
-    const typing = el('div', { class: 'chat-msg chat-msg-ai fade-in', style: { opacity: '0.6' } }, '...');
-    messages.appendChild(typing);
-    messages.scrollTop = messages.scrollHeight;
-
-    try {
-      const response = await sendCoachChat(text, chatHistory);
-      chatHistory.push({ role: 'model', text: response.text });
-      typing.remove();
-      const aiMsg = el('div', { class: 'chat-msg chat-msg-ai fade-in' }, response.text);
-      messages.appendChild(aiMsg);
-    } catch (e) {
-      typing.remove();
-      messages.appendChild(el('div', { class: 'chat-msg chat-msg-ai fade-in' },
-        'Sorry, I couldn\'t process that. Try again.'
-      ));
-    }
-
-    messages.scrollTop = messages.scrollHeight;
-  }
-
-  return chat;
-}
 
