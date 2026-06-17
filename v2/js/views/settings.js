@@ -12,6 +12,7 @@ import {
 } from '../state.js';
 import { showBottomSheet, formGroup, formInput } from '../components/bottom-sheet.js';
 import { showToast } from '../components/toast.js';
+import { syncHealthData, getHealthServerInfo, buildWebhookUrl } from '../ai/health-sync.js';
 import {
   auth, db, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
   doc, setDoc, getDoc,
@@ -84,6 +85,101 @@ export function renderSettings(container) {
   }));
 
   wrap.appendChild(aiSection);
+
+  // Apple Health section
+  const healthSection = el('div', { class: 'settings-section' });
+  healthSection.appendChild(el('h4', { class: 'settings-section-title' }, '🍎 Apple Health'));
+
+  // Status + last sync row
+  const logs = getState('logs') || {};
+  const today = getState('dateStr');
+  const todayLog = logs[today] || {};
+  const lastSyncTime = todayLog._healthSyncTime;
+  const isConnected = !!lastSyncTime;
+  const lastSyncLabel = lastSyncTime
+    ? `Last sync: ${new Date(lastSyncTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+    : 'Not synced yet';
+
+  const statusDot = el('span', {
+    class: `health-status-dot ${isConnected ? 'connected' : 'disconnected'}`
+  });
+  const statusText = el('span', { class: 'health-status-label' },
+    isConnected ? 'Connected' : 'Not connected'
+  );
+  const statusRow = el('div', { class: 'health-status-row' },
+    el('div', { class: 'health-status-indicator' }, statusDot, statusText),
+    el('span', { class: 'caption', style: { color: 'var(--text-subtle)' } }, lastSyncLabel)
+  );
+  healthSection.appendChild(statusRow);
+
+  // Webhook URL card (loaded async)
+  const webhookCard = el('div', { class: 'health-webhook-card' },
+    el('p', { class: 'health-webhook-label' }, 'Webhook URL for Health Auto Export'),
+    el('p', { class: 'health-webhook-url', id: 'webhook-url-text' }, 'Loading...')
+  );
+
+  const copyBtn = el('button', {
+    class: 'btn btn-secondary',
+    style: { width: '100%', marginTop: 'var(--space-2)' },
+    onClick: () => {
+      const urlEl = document.getElementById('webhook-url-text');
+      const url = urlEl?.textContent;
+      if (url && url !== 'Loading...') {
+        navigator.clipboard.writeText(url).then(() => {
+          showToast('Webhook URL copied!', { type: 'success' });
+        }).catch(() => {
+          showToast('Copy failed — select and copy manually', { type: 'error' });
+        });
+      }
+    },
+  }, '📋 Copy Webhook URL');
+
+  webhookCard.appendChild(copyBtn);
+  healthSection.appendChild(webhookCard);
+
+  // Load server info asynchronously
+  getHealthServerInfo().then(info => {
+    const urlEl = document.getElementById('webhook-url-text');
+    if (urlEl && info) {
+      const url = buildWebhookUrl(info.ip, info.port, info.token);
+      urlEl.textContent = url;
+    } else if (urlEl) {
+      urlEl.textContent = 'Server not reachable — start the dev server';
+    }
+  });
+
+  // Sync Now button
+  const syncBtn = el('button', {
+    class: 'btn btn-primary',
+    style: { width: '100%', marginTop: 'var(--space-3)' },
+    onClick: async () => {
+      syncBtn.disabled = true;
+      syncBtn.replaceChildren(el('span', { class: 'spinner' }), ' Syncing...');
+      const ok = await syncHealthData(false);
+      syncBtn.disabled = false;
+      syncBtn.replaceChildren('🔄 Sync Now');
+      if (!ok) {
+        showToast('No new health data available yet', { type: 'info' });
+      } else {
+        container.replaceChildren();
+        renderSettings(container);
+      }
+    },
+  }, '🔄 Sync Now');
+  healthSection.appendChild(syncBtn);
+
+  // Setup guide link
+  healthSection.appendChild(el('div', { class: 'health-setup-guide' },
+    el('p', { class: 'caption' },
+      '1. Install ',
+      el('strong', {}, 'Health Auto Export'),
+      ' (free) from the App Store'
+    ),
+    el('p', { class: 'caption' }, '2. Open app → Export → REST API → paste Webhook URL above'),
+    el('p', { class: 'caption' }, '3. Set sync frequency to Hourly — done! ✓')
+  ));
+
+  wrap.appendChild(healthSection);
 
   // Account section
   const accountSection = el('div', { class: 'settings-section' });

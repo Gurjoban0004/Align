@@ -14,6 +14,7 @@ import { initKeyboardShortcuts } from './components/command-palette.js';
 import { auth, onAuthStateChanged } from './firebase-config.js';
 import { el } from './dom.js';
 import { initAIBubble } from './components/ai-bubble.js';
+import { syncHealthData } from './ai/health-sync.js';
 
 
 // ─── Initialize ───
@@ -107,6 +108,19 @@ function init() {
   if (!localStorage.getItem('align_device_id')) {
     localStorage.setItem('align_device_id', crypto.randomUUID());
   }
+
+  // 15. Silent Apple Health sync on startup — runs in background, never blocks UI
+  setTimeout(() => {
+    syncHealthData(true).then(synced => {
+      if (synced) {
+        console.log('[Align] Apple Health data synced silently on startup');
+        // Re-render dashboard if it's active to show fresh data
+        if (getState('activeView') === 'dashboard') {
+          navigate('dashboard');
+        }
+      }
+    });
+  }, 1500); // wait 1.5s after app boot so it doesn't compete with rendering
 
   // 14. PWA install prompt
   let deferredPrompt = null;
