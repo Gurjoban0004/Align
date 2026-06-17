@@ -130,25 +130,6 @@ export function initState() {
   // Detect time period
   _state.timePeriod = detectTimePeriod();
 
-  // Check for plaintext keys in profile, migrate to sessionStorage, and scrub from localStorage
-  if (_state.profile) {
-    let updated = false;
-    if (_state.profile.geminiApiKey) {
-      setGeminiKey(_state.profile.geminiApiKey);
-      delete _state.profile.geminiApiKey;
-      _state.profile.hasGeminiKey = true;
-      updated = true;
-    }
-    if (_state.profile.omdbApiKey) {
-      setOmdbKey(_state.profile.omdbApiKey);
-      delete _state.profile.omdbApiKey;
-      _state.profile.hasOmdbKey = true;
-      updated = true;
-    }
-    if (updated) {
-      localStorage.setItem(LS_PREFIX + 'profile', JSON.stringify(_state.profile));
-    }
-  }
 
   // 1c. Bidirectionally sync habits and logs immediately on init
   syncAllHabitsAndLogs();
@@ -481,13 +462,13 @@ export function getGreeting() {
 export { getEmptyDayLog };
 
 // ─── XOR Obfuscation System ───
-const SESSION_SALT = Math.random().toString(36).substring(2) + Date.now().toString();
+const OBFUSCATION_KEY = 'align_v2_obfuscation_salt';
 
 function xorEncrypt(text) {
   if (!text) return '';
   let result = '';
   for (let i = 0; i < text.length; i++) {
-    const charCode = text.charCodeAt(i) ^ SESSION_SALT.charCodeAt(i % SESSION_SALT.length);
+    const charCode = text.charCodeAt(i) ^ OBFUSCATION_KEY.charCodeAt(i % OBFUSCATION_KEY.length);
     result += String.fromCharCode(charCode);
   }
   return btoa(result);
@@ -499,7 +480,7 @@ function xorDecrypt(encrypted) {
     const text = atob(encrypted);
     let result = '';
     for (let i = 0; i < text.length; i++) {
-      const charCode = text.charCodeAt(i) ^ SESSION_SALT.charCodeAt(i % SESSION_SALT.length);
+      const charCode = text.charCodeAt(i) ^ OBFUSCATION_KEY.charCodeAt(i % OBFUSCATION_KEY.length);
       result += String.fromCharCode(charCode);
     }
     return result;
@@ -509,28 +490,36 @@ function xorDecrypt(encrypted) {
 }
 
 export function getGeminiKey() {
-  const encrypted = sessionStorage.getItem('align_gemini_key');
-  return xorDecrypt(encrypted) || null;
+  const profile = _state.profile || {};
+  return xorDecrypt(profile.geminiApiKey) || null;
 }
 
 export function setGeminiKey(key) {
+  const profile = { ...(_state.profile || {}) };
   if (key) {
-    sessionStorage.setItem('align_gemini_key', xorEncrypt(key));
+    profile.geminiApiKey = xorEncrypt(key);
+    profile.hasGeminiKey = true;
   } else {
-    sessionStorage.removeItem('align_gemini_key');
+    delete profile.geminiApiKey;
+    profile.hasGeminiKey = false;
   }
+  setState('profile', profile);
 }
 
 export function getOmdbKey() {
-  const encrypted = sessionStorage.getItem('align_omdb_key');
-  return xorDecrypt(encrypted) || null;
+  const profile = _state.profile || {};
+  return xorDecrypt(profile.omdbApiKey) || null;
 }
 
 export function setOmdbKey(key) {
+  const profile = { ...(_state.profile || {}) };
   if (key) {
-    sessionStorage.setItem('align_omdb_key', xorEncrypt(key));
+    profile.omdbApiKey = xorEncrypt(key);
+    profile.hasOmdbKey = true;
   } else {
-    sessionStorage.removeItem('align_omdb_key');
+    delete profile.omdbApiKey;
+    profile.hasOmdbKey = false;
   }
+  setState('profile', profile);
 }
 

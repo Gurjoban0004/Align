@@ -446,14 +446,8 @@ function editKeyField(label, stateKey, currentValue, container) {
           
           if (stateKey === 'geminiApiKey') {
             setGeminiKey(val);
-            const profile = { ...(getState('profile') || {}) };
-            profile.hasGeminiKey = !!val;
-            setState('profile', profile);
           } else if (stateKey === 'omdbApiKey') {
             setOmdbKey(val);
-            const profile = { ...(getState('profile') || {}) };
-            profile.hasOmdbKey = !!val;
-            setState('profile', profile);
           }
 
           showToast(`${label} updated`, { type: 'success' });
