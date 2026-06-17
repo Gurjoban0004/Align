@@ -144,7 +144,28 @@ export default async function handler(req, res) {
   }
 
   try {
-    const syncToken = req.query.token || req.query.syncToken || req.body.syncToken || req.body.SyncToken;
+    // Robustly parse body in case Content-Type is not set to application/json by the client
+    let body = req.body;
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch (e) {
+        // Not a JSON string
+      }
+    } else if (Buffer.isBuffer(body)) {
+      try {
+        body = JSON.parse(body.toString('utf8'));
+      } catch (e) {
+        // Not a JSON buffer
+      }
+    }
+
+    // Default payload fallback
+    if (!body || typeof body !== 'object') {
+      body = {};
+    }
+
+    const syncToken = req.query.token || req.query.syncToken || body.syncToken || body.SyncToken;
 
     if (!syncToken) {
       return res.status(401).json({ error: 'Unauthorized: Missing syncToken' });
@@ -164,7 +185,7 @@ export default async function handler(req, res) {
     const userId = usersSnapshot.docs[0].id;
 
     // ─── 1. Health Auto Export Webhook Payload Format ───
-    const metrics = req.body?.data?.metrics;
+    const metrics = body?.data?.metrics;
     if (metrics && Array.isArray(metrics)) {
       const aggregated = {};
       metrics.forEach(metric => {
@@ -194,10 +215,10 @@ export default async function handler(req, res) {
     }
 
     // ─── 2. Flat Apple Shortcut Payload Format ───
-    let date = req.body.date || req.body.Date;
-    const rawSteps = req.body.steps || req.body.Steps || req.body.Number; // Fallback if they left the default 'Number' key
-    const rawSleep = req.body.sleep || req.body.Sleep;
-    const rawActiveBurn = req.body.activeBurn || req.body.ActiveBurn || req.body.activeburn;
+    let date = body.date || body.Date;
+    const rawSteps = body.steps || body.Steps || body.Number; // Fallback if they left the default 'Number' key
+    const rawSleep = body.sleep || body.Sleep;
+    const rawActiveBurn = body.activeBurn || body.ActiveBurn || body.activeburn;
 
     if (!date) {
       return res.status(400).json({ error: 'Bad Request: Missing date (YYYY-MM-DD)' });
@@ -233,7 +254,7 @@ export default async function handler(req, res) {
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ 
         error: 'Bad Request: No valid health data (steps, sleep, activeBurn) provided.',
-        receivedBody: req.body
+        receivedBody: body
       });
     }
 
