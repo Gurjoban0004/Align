@@ -113,17 +113,17 @@ export function renderSettings(container) {
   healthSection.appendChild(statusRow);
 
   // Webhook URL card (loaded async)
+  const webhookUrlText = el('p', { class: 'health-webhook-url', id: 'webhook-url-text' }, 'Loading...');
   const webhookCard = el('div', { class: 'health-webhook-card' },
     el('p', { class: 'health-webhook-label' }, 'Webhook URL for Health Auto Export'),
-    el('p', { class: 'health-webhook-url', id: 'webhook-url-text' }, 'Loading...')
+    webhookUrlText
   );
 
   const copyBtn = el('button', {
     class: 'btn btn-secondary',
     style: { width: '100%', marginTop: 'var(--space-2)' },
     onClick: () => {
-      const urlEl = document.getElementById('webhook-url-text');
-      const url = urlEl?.textContent;
+      const url = webhookUrlText.textContent;
       if (url && url !== 'Loading...') {
         navigator.clipboard.writeText(url).then(() => {
           showToast('Webhook URL copied!', { type: 'success' });
@@ -141,35 +141,29 @@ export function renderSettings(container) {
   const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   if (isLocal) {
     getHealthServerInfo().then(info => {
-      const urlEl = document.getElementById('webhook-url-text');
-      if (urlEl) {
-        if (info) {
-          const url = buildWebhookUrl(info.ip, info.port, info.token);
-          urlEl.textContent = url;
-        } else {
-          // Local fallback using localhost address and local profile token
-          let token = profile.syncToken;
-          if (!token) {
-            token = 't' + Math.random().toString(36).substring(2) + Date.now().toString(36);
-            profile.syncToken = token;
-            setState('profile', { ...profile });
-          }
-          urlEl.textContent = `${window.location.origin}/api/health-sync?token=${token}`;
+      if (info) {
+        const url = buildWebhookUrl(info.ip, info.port, info.token);
+        webhookUrlText.textContent = url;
+      } else {
+        // Local fallback using localhost address and local profile token
+        let token = profile.syncToken;
+        if (!token) {
+          token = 't' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+          profile.syncToken = token;
+          setState('profile', { ...profile });
         }
+        webhookUrlText.textContent = `${window.location.origin}/api/health-sync?token=${token}`;
       }
     });
   } else {
     // Production Vercel URL
-    const urlEl = document.getElementById('webhook-url-text');
-    if (urlEl) {
-      let token = profile.syncToken;
-      if (!token) {
-        token = 't' + Math.random().toString(36).substring(2) + Date.now().toString(36);
-        profile.syncToken = token;
-        setState('profile', { ...profile });
-      }
-      urlEl.textContent = `${window.location.origin}/api/health-sync?token=${token}`;
+    let token = profile.syncToken;
+    if (!token) {
+      token = 't' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+      profile.syncToken = token;
+      setState('profile', { ...profile });
     }
+    webhookUrlText.textContent = `${window.location.origin}/api/health-sync?token=${token}`;
   }
 
   // Sync Now button
