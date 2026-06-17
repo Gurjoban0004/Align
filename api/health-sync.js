@@ -35,7 +35,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const syncToken = req.body.syncToken || req.body.SyncToken;
+    const syncToken = req.query.token || req.query.syncToken || req.body.syncToken || req.body.SyncToken;
     let date = req.body.date || req.body.Date;
     const rawSteps = req.body.steps || req.body.Steps || req.body.Number; // Fallback if they left the default 'Number' key
     const rawSleep = req.body.sleep || req.body.Sleep;

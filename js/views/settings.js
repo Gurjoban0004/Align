@@ -137,16 +137,40 @@ export function renderSettings(container) {
   webhookCard.appendChild(copyBtn);
   healthSection.appendChild(webhookCard);
 
-  // Load server info asynchronously
-  getHealthServerInfo().then(info => {
+  // Load server info asynchronously (adaptive: handles localhost dev server port fallback and production Vercel)
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  if (isLocal) {
+    getHealthServerInfo().then(info => {
+      const urlEl = document.getElementById('webhook-url-text');
+      if (urlEl) {
+        if (info) {
+          const url = buildWebhookUrl(info.ip, info.port, info.token);
+          urlEl.textContent = url;
+        } else {
+          // Local fallback using localhost address and local profile token
+          let token = profile.syncToken;
+          if (!token) {
+            token = 't' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+            profile.syncToken = token;
+            setState('profile', { ...profile });
+          }
+          urlEl.textContent = `${window.location.origin}/api/health-sync?token=${token}`;
+        }
+      }
+    });
+  } else {
+    // Production Vercel URL
     const urlEl = document.getElementById('webhook-url-text');
-    if (urlEl && info) {
-      const url = buildWebhookUrl(info.ip, info.port, info.token);
-      urlEl.textContent = url;
-    } else if (urlEl) {
-      urlEl.textContent = 'Server not reachable — start the dev server';
+    if (urlEl) {
+      let token = profile.syncToken;
+      if (!token) {
+        token = 't' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+        profile.syncToken = token;
+        setState('profile', { ...profile });
+      }
+      urlEl.textContent = `${window.location.origin}/api/health-sync?token=${token}`;
     }
-  });
+  }
 
   // Sync Now button
   const syncBtn = el('button', {
