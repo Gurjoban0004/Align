@@ -1,5 +1,7 @@
 import * as firebase from './firebase-config.js';
 import * as gemini from './gemini.js';
+import { createTrainingWorkspace, stopFitnessTimer } from './fitness.js';
+import { localDate, sameStoredData } from './fitness-core.mjs';
 
 // --- PWA Service Worker Registration ---
 if ('serviceWorker' in navigator) {
@@ -122,7 +124,7 @@ let state = {
   profile: null, // User Onboarding Profile
   activeView: 'dashboard',
   dashboardSubTab: 'today',
-  dateStr: new Date().toISOString().split('T')[0], // YYYY-MM-DD
+  dateStr: localDate(), // YYYY-MM-DD
   
   // Custom split routines
   workoutSplit: {
@@ -267,28 +269,7 @@ function loadLocalState() {
   if (localBooks) state.books = JSON.parse(localBooks);
   if (localMovies) state.movies = JSON.parse(localMovies);
   
-  // Seed initial values for mock completeness grid representation if empty
-  if (Object.keys(state.logs).length < 5) {
-    const today = new Date();
-    for (let i = 1; i <= 15; i++) {
-      const pastDate = new Date(today);
-      pastDate.setDate(today.getDate() - i);
-      const dateStr = pastDate.toISOString().split('T')[0];
-      state.logs[dateStr] = {
-        steps: Math.floor(Math.random() * 6000) + 5000,
-        water: Math.floor(Math.random() * 6) + 3,
-        sleep: Math.floor(Math.random() * 3) + 5.5,
-        weight: 78.4 + (Math.random() * 0.8 - 0.4),
-        calories: Math.floor(Math.random() * 600) + 1500,
-        protein: Math.floor(Math.random() * 60) + 80,
-        workouts: Math.random() > 0.5 ? [{ name: 'Squats', sets: 4, reps: 8, weight: 70 }] : [],
-        habitsCompleted: Math.random() > 0.5 ? ['h1'] : [],
-        pagesRead: Math.floor(Math.random() * 20)
-      };
-      syncDailyProgress(state.logs[dateStr]);
-    }
-    saveLocalState();
-  }
+
 }
 
 function saveLocalState() {
@@ -1099,7 +1080,7 @@ function getWeeklyTrends(baseDateStr) {
   for (let i = 0; i < 7; i++) {
     const targetDate = new Date(baseDate);
     targetDate.setDate(baseDate.getDate() - i);
-    const dateStr = targetDate.toISOString().split('T')[0];
+    const dateStr = localDate(targetDate);
     
     const dayLog = state.logs[dateStr];
     if (dayLog) {
@@ -1164,6 +1145,8 @@ function setupFirestoreSync(user) {
   firestoreUserUnsubscribe = firebase.onSnapshot(userDocRef, (docSnapshot) => {
     if (docSnapshot.exists()) {
       const data = docSnapshot.data();
+      const unchanged = ['workoutSplit', 'recipes', 'books', 'movies', 'profile'].every(key => !data[key] || sameStoredData(data[key], state[key]));
+      if (unchanged && state.profile?.syncToken) return;
       if (data.workoutSplit) state.workoutSplit = data.workoutSplit;
       if (data.recipes) state.recipes = data.recipes;
       if (data.books) state.books = data.books;
@@ -1204,7 +1187,9 @@ function setupFirestoreLogSync(user, date) {
   const logDocRef = firebase.doc(firebase.db, "users", user.uid, "dailyLogs", date);
   firestoreLogUnsubscribe = firebase.onSnapshot(logDocRef, (docSnapshot) => {
     if (docSnapshot.exists()) {
-      state.logs[date] = normalizeDayLog(docSnapshot.data());
+      const incoming = normalizeDayLog(docSnapshot.data());
+      if (sameStoredData(incoming, state.logs[date])) return;
+      state.logs[date] = incoming;
       saveLocalState();
       renderApp();
     } else {
@@ -1219,7 +1204,7 @@ function setupFirestoreLogSync(user, date) {
 }
 
 function generateSyncToken() {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  return Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 
 async function saveUserPreferences() {
@@ -1825,6 +1810,7 @@ function renderOnboarding() {
 }
 
 function renderApp() {
+  stopFitnessTimer();
   const shouldResetScroll = lastRenderedView !== state.activeView;
   
   const desktopDate = document.getElementById('global-date-picker');
@@ -1999,12 +1985,12 @@ function renderDashboard() {
     for (let i = 6; i >= 0; i--) {
       const dayDate = new Date(todayObj);
       dayDate.setDate(todayObj.getDate() - i);
-      const dateStr = dayDate.toISOString().split('T')[0];
+      const dateStr = localDate(dayDate);
       const dayName = dayDate.toLocaleDateString('en-US', { weekday: 'short' }).charAt(0);
       const dayNum = dayDate.getDate();
       
       const isSelected = dateStr === state.dateStr;
-      const isToday = dateStr === new Date().toISOString().split('T')[0];
+      const isToday = dateStr === localDate();
       
       const dayLog = state.logs[dateStr] || {};
       const dayHabitsDone = (dayLog.habitsCompleted || []).length;
@@ -2137,7 +2123,7 @@ function renderDashboard() {
     for (let i = 29; i >= 0; i--) {
       const targetDate = new Date(cellToday);
       targetDate.setDate(cellToday.getDate() - i);
-      const cellDateStr = targetDate.toISOString().split('T')[0];
+      const cellDateStr = localDate(targetDate);
       cellDates.push(cellDateStr);
     }
 
@@ -2315,7 +2301,7 @@ function renderDashboard() {
     // Check auto-synthesis at 9:00 PM
     const autoSynthesizeIfNeeded = async () => {
       if (day.aiReview) return;
-      const todayDateStr = new Date().toISOString().split('T')[0];
+      const todayDateStr = localDate();
       if (state.dateStr !== todayDateStr) return; // Only for current day
       
       const currentHour = new Date().getHours();
@@ -2916,199 +2902,21 @@ function renderDashboard() {
 }
 
 // --- VIEW: ADD EXERCISE MODAL (BOTTOM SHEET) ---
-function openAddExerciseModal(day, onSave) {
-  const common = [
-    "Bench Press", "Squats", "Deadlift", "Overhead Press", 
-    "Lat Pulldown", "Barbell Row", "Bicep Curls", 
-    "Tricep Pushdowns", "Leg Press", "Calf Raises"
-  ];
-
-  showBottomSheet('Add Exercise', (body, dismiss) => {
-    body.appendChild(el('div', { class: 'food-section-label', style: { marginBottom: '8px' } }, 'Quick Select Presets'));
-    
-    const chipsGrid = el('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' } });
-    common.forEach(name => {
-      const chip = el('button', {
-        class: 'step-preset-chip',
-        style: { padding: '6px 12px', minWidth: 'auto', display: 'inline-flex', flexDirection: 'row', gap: '4px', alignItems: 'center' },
-        onClick: () => {
-          day.workouts.push({ name, sets: 3, reps: 10, weight: 20 });
-          queueSave();
-          onSave();
-          dismiss();
-        }
-      }, name);
-      chipsGrid.appendChild(chip);
-    });
-    body.appendChild(chipsGrid);
-
-    body.appendChild(el('div', { class: 'food-section-label', style: { marginBottom: '8px' } }, 'Or Enter Custom Name'));
-    const input = el('input', {
-      type: 'text',
-      placeholder: 'Exercise title...',
-      class: 'form-control',
-      style: { width: '100%', marginBottom: '12px' }
-    });
-    const addBtn = el('button', {
-      class: 'btn btn-primary',
-      style: { width: '100%' },
-      onClick: () => {
-        const name = input.value.trim();
-        if (name) {
-          day.workouts.push({ name, sets: 3, reps: 10, weight: 20 });
-          queueSave();
-          onSave();
-          dismiss();
-        }
-      }
-    }, 'Add Custom Exercise');
-
-    body.appendChild(input);
-    body.appendChild(addBtn);
-  });
-}
-
 // --- VIEW: FITNESS (REDESIGNED EXERCISE WORKBOOK & MEAL DIET LIST) ---
 function renderFitness() {
-  const day = getTodayLog();
-  const fitnessWrapper = el('div', { class: 'section' });
-  const container = el('div', { class: 'container' });
-  
-  const header = el('div', { class: 'page-header' },
-    el('span', { class: 'page-kicker' }, "Training Log"),
-    el('h1', {}, "Fitness & Diet")
-  );
-  container.appendChild(header);
+  getTodayLog();
+  return createTrainingWorkspace({ state, el, save: queueSave,
+    renderNutrition: renderFitnessNutrition, openSteps: openStepsLogger });
+}
 
-  const subTabs = el('div', { class: 'segmented-control', style: { marginBottom: '24px' } });
+function renderFitnessNutrition() {
+  const day = getTodayLog();
   const activeContent = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '24px' } });
   
   const renderFitnessSubTab = (tab) => {
     activeContent.replaceChildren();
     
-    subTabs.replaceChildren(
-      el('button', { class: `segmented-btn ${tab === 'log' ? 'active' : ''}`, onClick: () => renderFitnessSubTab('log') }, "Exercise Log"),
-      el('button', { class: `segmented-btn ${tab === 'nutrition' ? 'active' : ''}`, onClick: () => renderFitnessSubTab('nutrition') }, "Nutrition")
-    );
-
-    if (tab === 'log') {
-      // Splits selection chips
-      const chips = el('div', { class: 'routine-chips-container', style: { display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '24px', alignItems: 'center' } },
-        el('span', { style: { fontSize: '12px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--colors-muted)' } }, "Active Splits:")
-      );
-      Object.keys(state.workoutSplit).forEach(key => {
-        chips.appendChild(
-          el('button', {
-            class: 'routine-chip',
-            onClick: () => {
-              const exercises = state.workoutSplit[key];
-              day.workouts = exercises.map(ex => ({
-                name: ex.name,
-                sets: ex.sets,
-                reps: ex.reps,
-                weight: ex.weight,
-                logged: false
-              }));
-              queueSave();
-              renderFitnessSubTab('log');
-            }
-          }, key)
-        );
-      });
-      activeContent.appendChild(chips);
-
-      // Exercise items log cards
-      const exerciseList = el('div', { style: { display: 'flex', flexDirection: 'column', gap: '16px' } });
-      const renderExerciseList = () => {
-        exerciseList.replaceChildren();
-        
-        if (day.workouts.length === 0) {
-          exerciseList.appendChild(
-            el('div', { style: { textAlign: 'center', padding: '40px', background: 'var(--colors-surface-card)', borderRadius: 'var(--rounded-xl)', border: '1px dashed var(--colors-muted-soft)' } },
-              el('p', { style: { color: 'var(--colors-muted)', fontStyle: 'italic' } }, 
-                "No exercises logged for today. Select a split above to pre-populate or add a custom one below."
-              )
-            )
-          );
-        } else {
-          day.workouts.forEach((ex, idx) => {
-            const isLogged = !!ex.logged;
-            const card = el('div', { class: `form-card exercise-logger-card ${isLogged ? 'logged' : ''}`, style: { position: 'relative' } },
-              el('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' } },
-                el('h4', { style: { margin: '0', fontSize: '16px', fontWeight: '700', color: 'var(--colors-ink)' } }, ex.name),
-                el('button', {
-                  class: 'btn btn-text',
-                  style: { color: 'var(--colors-error)', padding: '4px' },
-                  onClick: () => {
-                    day.workouts.splice(idx, 1);
-                    queueSave();
-                    renderExerciseList();
-                  }
-                }, icon(ICONS.trash))
-              ),
-              el('div', { class: 'exercise-adjuster-row' },
-                // Sets adjuster
-                el('div', { class: 'adjuster-column' },
-                  el('span', { class: 'adjuster-label' }, "Sets"),
-                  el('div', { class: 'inline-adjuster' },
-                    el('button', { class: 'adjuster-btn', disabled: isLogged, onClick: () => { if (ex.sets > 1) { ex.sets--; queueSave(); renderExerciseList(); } } }, "−"),
-                    el('span', { class: 'adjuster-value' }, ex.sets),
-                    el('button', { class: 'adjuster-btn', disabled: isLogged, onClick: () => { ex.sets++; queueSave(); renderExerciseList(); } }, "+")
-                  )
-                ),
-                // Reps adjuster
-                el('div', { class: 'adjuster-column' },
-                  el('span', { class: 'adjuster-label' }, "Reps"),
-                  el('div', { class: 'inline-adjuster' },
-                    el('button', { class: 'adjuster-btn', disabled: isLogged, onClick: () => { if (ex.reps > 1) { ex.reps--; queueSave(); renderExerciseList(); } } }, "−"),
-                    el('span', { class: 'adjuster-value' }, ex.reps),
-                    el('button', { class: 'adjuster-btn', disabled: isLogged, onClick: () => { ex.reps++; queueSave(); renderExerciseList(); } }, "+")
-                  )
-                ),
-                // Weight adjuster
-                el('div', { class: 'adjuster-column' },
-                  el('span', { class: 'adjuster-label' }, "Weight"),
-                  el('div', { class: 'inline-adjuster' },
-                    el('button', { class: 'adjuster-btn', disabled: isLogged, onClick: () => { if (ex.weight >= 2.5) { ex.weight -= 2.5; queueSave(); renderExerciseList(); } } }, "−"),
-                    el('span', { class: 'adjuster-value', style: { minWidth: '70px' } }, `${ex.weight} kg`),
-                    el('button', { class: 'adjuster-btn', disabled: isLogged, onClick: () => { ex.weight += 2.5; queueSave(); renderExerciseList(); } }, "+")
-                  )
-                ),
-                // Log column aligned
-                el('div', { class: 'adjuster-column', style: { justifyContent: 'flex-end' } },
-                  el('span', { class: 'adjuster-label', style: { visibility: 'hidden' } }, "Action"),
-                  el('button', {
-                    class: `btn log-exercise-btn ${isLogged ? 'logged' : ''}`,
-                    style: { height: '32px', padding: '0 16px', fontSize: '13px', borderRadius: 'var(--rounded-pill)' },
-                    onClick: () => {
-                      ex.logged = !isLogged;
-                      queueSave();
-                      renderExerciseList();
-                    }
-                  }, isLogged ? [icon(ICONS.check), " Logged"] : "Log")
-                )
-              )
-            );
-            exerciseList.appendChild(card);
-          });
-        }
-
-        // Add exercise button
-        exerciseList.appendChild(
-          el('button', {
-            class: 'btn btn-primary',
-            style: { width: 'fit-content', alignSelf: 'center', marginTop: '8px' },
-            onClick: () => {
-              openAddExerciseModal(day, () => renderExerciseList());
-            }
-          }, icon(ICONS.plus), "Add Exercise")
-        );
-      };
-
-      renderExerciseList();
-      activeContent.appendChild(exerciseList);
-
-    } else if (tab === 'nutrition') {
+    if (tab === 'nutrition') {
       const calGoal = state.profile?.targetCalories || 2000;
       const proteinGoal = state.profile?.targetProtein || 150;
       
@@ -3449,11 +3257,8 @@ function renderFitness() {
     }
   };
 
-  renderFitnessSubTab('log');
-  container.appendChild(subTabs);
-  container.appendChild(activeContent);
-  fitnessWrapper.appendChild(container);
-  return fitnessWrapper;
+  renderFitnessSubTab('nutrition');
+  return activeContent;
 }
 
 // --- VIEW: DAILY HABITS (REDESIGNED BY CATEGORY WITH STREAKS) ---
@@ -3462,7 +3267,7 @@ function getHabitStreak(habitId) {
   let checkDate = new Date();
   
   const getFormatted = (d) => {
-    return d.toISOString().split('T')[0];
+    return localDate(d);
   };
 
   const todayStr = getFormatted(checkDate);
@@ -4718,7 +4523,7 @@ function renderSettings() {
       if (!fbConfigured || !signedIn) {
         healthSyncCard = el('div', { class: 'form-card health-sync-card', style: { marginTop: '24px' } },
           el('h3', {}, " Apple Health Integration"),
-          el('p', { class: 'page-subtitle' }, "Configure a secure, automatic sync from your iPhone using Apple Shortcuts."),
+          el('p', { class: 'page-subtitle' }, "Send Apple Health totals from your iPhone using Shortcuts. Health access requires an unlocked phone and uploading requires internet."),
           el('div', { 
             style: { 
               padding: '16px', 
@@ -4742,7 +4547,7 @@ function renderSettings() {
 
         healthSyncCard = el('div', { class: 'form-card health-sync-card', style: { marginTop: '24px' } },
           el('h3', {}, " Apple Health Integration"),
-          el('p', { class: 'page-subtitle' }, "Synchronize steps, sleep, and active energy burn automatically from your iPhone using the built-in iOS Shortcuts app. Completely free, secure, and offline-compatible."),
+          el('p', { class: 'page-subtitle' }, "Send daily totals from Apple Health using Shortcuts. This PWA cannot read Apple Health directly. Your phone must be unlocked to read health data, and online to upload it."),
           
           el('div', { class: 'settings-split-wrapper', style: { display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '12px' } },
             el('div', {},
@@ -4769,7 +4574,7 @@ function renderSettings() {
             el('div', {},
               el('h4', { style: { fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: '700', color: 'var(--colors-ink)', marginBottom: '8px' } }, "Step 2: Get the Universal Apple Shortcut"),
               el('p', { style: { fontSize: '13px', color: 'var(--colors-muted)', lineHeight: '1.4', marginBottom: '8px' } }, 
-                "Download the pre-built Apple Shortcut. When prompted during installation, paste your Sync Token from above."
+                "Use the existing shortcut as a starting point. Verify its destination and fields against the setup guide before running it."
               ),
               el('a', {
                 href: 'https://www.icloud.com/shortcuts/64c67bd770ea4502b85e05a2f5f4007b',
@@ -4782,7 +4587,7 @@ function renderSettings() {
             el('div', {},
               el('h4', { style: { fontFamily: 'var(--font-display)', fontSize: '15px', fontWeight: '700', color: 'var(--colors-ink)', marginBottom: '8px' } }, "Step 3: Set up iOS Automation (Optional)"),
               el('p', { style: { fontSize: '13px', color: 'var(--colors-muted)', lineHeight: '1.4' } }, 
-                "Inside the iOS Shortcuts app, navigate to Automation -> Create Personal Automation. Trigger it when you close an app (like Messages or Safari) to sync automatically in the background all day."
+                "Prefer an App → Is Opened automation while your iPhone is unlocked. Scheduled runs can fail when locked. Send the daily total as steps and the local day as yyyy-MM-dd; repeat uploads replace the total. Never sum overlapping iPhone and Watch raw samples."
               )
             )
           )
@@ -4814,7 +4619,10 @@ function renderSettings() {
       settingsContent.appendChild(authCard);
       settingsContent.appendChild(geminiCard);
       settingsContent.appendChild(coachSettingsCard);
-      if (healthSyncCard) settingsContent.appendChild(healthSyncCard);
+      if (healthSyncCard) {
+        healthSyncCard.appendChild(el('a', { href: './docs/iphone-steps.md', target: '_blank', class: 'btn btn-text' }, 'Read iPhone step-sync setup →'));
+        settingsContent.appendChild(healthSyncCard);
+      }
       settingsContent.appendChild(dangerCard);
     }
   };
@@ -4854,3 +4662,4 @@ function initApp() {
 }
 
 initApp();
+

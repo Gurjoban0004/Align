@@ -1,6 +1,6 @@
 {
-  "name": "Life Tracker PWA",
-  "short_name": "Life Tracker",
+  "name": "Align \u2014 Your daily rhythm",
+  "short_name": "Align",
   "description": "An editorial-style daily digest and tracker for fitness, habits, reading, and movies.",
   "start_url": "./index.html",
   "display": "standalone",

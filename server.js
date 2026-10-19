@@ -15,6 +15,8 @@ const MIME_TYPES = {
   '.html': 'text/html',
   '.css': 'text/css',
   '.js': 'text/javascript',
+  '.mjs': 'text/javascript',
+  '.md': 'text/plain; charset=utf-8',
   '.json': 'application/json',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
@@ -66,3 +68,4 @@ server.listen(PORT, HOST, () => {
   console.log(`Server listening securely at http://${HOST}:${PORT}/`);
   console.log('Press Ctrl+C to terminate.');
 });
+

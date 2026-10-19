@@ -1,9 +1,13 @@
-const CACHE_NAME = 'life-tracker-cache-v4';
+const CACHE_NAME = 'align-fitness-cache-v5';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './redesign.css',
   './redesign.js',
+  './fitness.js',
+  './fitness-core.mjs',
+  './fitness.css',
+  './docs/iphone-steps.md',
   './firebase-config.js',
   './gemini.js',
   './manifest.json',
@@ -37,13 +41,15 @@ self.addEventListener('activate', (event) => {
 // Fetch Event (Network-first for scripts/HTML, Cache-first for styles/fonts/images)
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+  if (event.request.method !== 'GET' || url.pathname.startsWith('/api/')) return;
+  const staticOrigins = ['https://www.gstatic.com', 'https://fonts.googleapis.com', 'https://fonts.gstatic.com'];
+  if (url.origin !== self.location.origin && !staticOrigins.includes(url.origin)) return;
 
   // Skip Firebase dynamic requests, Firestore syncs, and Gemini API calls
   if (
     url.origin.includes('firestore.googleapis.com') ||
     url.origin.includes('identitytoolkit.googleapis.com') ||
-    url.origin.includes('generativelanguage.googleapis.com') ||
-    url.origin.includes('firebase')
+    url.origin.includes('generativelanguage.googleapis.com')
   ) {
     return;
   }
@@ -97,3 +103,4 @@ self.addEventListener('fetch', (event) => {
       })
   );
 });
+
